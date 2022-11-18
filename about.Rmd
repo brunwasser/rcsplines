@@ -1,0 +1,9 @@
+---
+title: "Purpose"
+output:
+  html_document:
+    theme: sandstone
+    highlight: tango
+---
+
+This site demonstrates how to implement restricted cubic splines to model nonlinear effects of continuous covariates and nonlinear time trajectories in structural equation models.

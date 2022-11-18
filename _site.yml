@@ -1,0 +1,13 @@
+name: "rcsplines"
+navbar:
+  title: "Applications of Restricted Cubic Splines in SEM"
+  left:
+    - text: "Purpose"
+      href: about.html
+    - text: "Demonstrations"
+      href: index.html
+output:
+  html_document:
+    theme: sandstone
+    highlight: tango
+output_dir: docs
