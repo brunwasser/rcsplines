@@ -20,8 +20,11 @@ knitr::opts_chunk$set(echo = TRUE,
 ```
 
 
-## Workspace Prep
+## Overview
+The purpose of this page is to demonstrate how restricted cubic splines (RCSs) to model nonlinear effects of predictors and nonlinear growth trajectories within a structural equation models (SEMs). First, I will show how to implement RCSs in ordinary least squares (OLS) and generalized least square (GLS) models. Then I will show how to implement RCSs in the context of SEMs.
 
+## Workspace Prep
+Load require package. You may have to install these packages if you have never installed them before using the **install.packages()** function. 
 ```{r}
 require( data.table )
 require( ggplot2 )
@@ -34,9 +37,11 @@ require( ERP )
 
 
 ## Demonstration in OLS regression
-Prior to demonstrating the use of restricted cubic splines (RCSs) in structural equation models (SEM), we will use RCSs to model a nonlinear association in an ordinary least squares (OLS) model using the [rms](). There are several helpful overviews for this package, including [this one](https://www.nicholas-ollberding.com/post/an-introduction-to-the-harrell-verse-predictive-modeling-using-the-hmisc-and-rms-packages/) and [this one](https://www.r-bloggers.com/2016/07/introduction-to-the-rms-package/).  
+Prior to demonstrating the use of restricted cubic splines (RCSs) in structural equation models (SEM), we will use RCSs to model a nonlinear association in an ordinary least squares (OLS) model using the [rms](https://CRAN.R-project.org/package=rms) package. There are several helpful overviews for this package, including [this one](https://www.nicholas-ollberding.com/post/an-introduction-to-the-harrell-verse-predictive-modeling-using-the-hmisc-and-rms-packages/) and [this one](https://www.r-bloggers.com/2016/07/introduction-to-the-rms-package/).  
 
-First, let's simulate data with a nonlinear association that does not follow a simple polynomial function. Goldfield and Wujciak-Jens provide [helpful code](https://www.rdatagen.net/post/2022-08-09-simulating-data-from-a-non-linear-function-by-specifying-some-points-on-the-curve/) that to accomplish this. Please see their code and explanations for a detailed explanation of this approach.
+First, let's simulate data with a nonlinear association that does not follow a simple polynomial function. Goldfield and Wujciak-Jens provide [helpful code](https://www.rdatagen.net/post/2022-08-09-simulating-data-from-a-non-linear-function-by-specifying-some-points-on-the-curve/) to accomplish this. Please see their code and explanations for a detailed explanation of this approach.
+
+As seen in the figure below, we simulated a response variable ($y$) whose values twice rise and fall rapidly as values of the predictor variable ($x$) increase. The predictor and response variables are housed in the dataframe *mdata*.
 ```{r}
 x <- c(20, 30, 40, 50, 60, 70, 80)
 y <- c(15, 40, 25, 22, 35, 24, 15)
@@ -49,9 +54,6 @@ dc[, xend := (shift(x, type = "lead"))]
 dc[, yend := (shift(y, type = "lead"))]
 dc <- dc[ -.N]
 dc[, id := .I]
-
-dc
-
 
 interp_line <- function(x, y, xend, yend) {
   slope <- (yend - y)/(xend - x)
@@ -81,38 +83,46 @@ ggplot(data = mdata, aes(x = x, y = y)) +
 
 ```
 
-
+We start by storing key features of our data frame using the **datadist()** function in the *rms* package. This will make data summaries, predictions, and plotting more efficient. We then use the **ols()** function to run a regression model (stored in an object called *ols.rcs5*) in which the effect of $x$ on $y$ is modeled with a 6-knot RCS. RCSs require $df=k-1$, where $k$ is the number of knots. Therefore, the effect of $x$ will require  ($df=5$). Note, that the model code looks like a standard R regression model (y ~ x) except that the function **rcs()** is called for the $x$ variable, telling the regression model to estimate a restricted cubic spline with 6 knots. We did not specify where to place the knots, so *rms* will use the default position values with the outer knots placed at the 0.10 and 0.90 quantiles and inner knots at equally spaced intervals in between.  
 ```{r}
 
 dd <- datadist( mdata )
 options( datadist = 'dd' ) 
 
-ols.rcs5 <- ols( y ~ rcs( x, 6 ),
-            data = mdata,
-            x = T,
-            y = T )
-print( ols.rcs5 )
-
-
+ols.rcs5 <- ols( y ~ rcs( x, 6 ), data = mdata )
 ```
 
+
+The **print()** function shows indices of model fit (e.g., $R^2$), the model likelihood ratio test, and the $k-1$ effects of $x$, representing the model-implied rate of change in $y$ for the different segments of $x$ defined by the spline knots. We can see that the effects of $x$ is easily different than 0 with alternating signs, capturing the rapid rises and descents of $y$ over the range of $x$ values.    
+```{r}
+print( ols.rcs5 )
+```
+
+We typically would like a statistical test for the overall effect of $x$ with $df=5$ in this case. The **anova.rms()** function provides an overall $F$ test and a test of whether there is evidence of nonlinearity in the effect of $x$ on $y$.
 ```{r}
 anova( ols.rcs5 )
 ```
 
-
-
+Interpreting the 5 RCS coefficient for the effect of $x$ on $y$ is not straightforward. The best way to interpret the effect is visually. The **Predict()** function makes it simple to obtain model-predicted values of $y$ against levels of $x$. We can plot these predictions easily using **ggplot2**. 
 ```{r}
-ols.pol5 <- ols( y ~ pol( x, 5 ),
-            data = mdata,
-            x = T,
-            y = T )
-print( ols.pol5 )
-anova( ols.pol5, tol=1e-15 )
+ggplot( Predict( ols.rcs5, x ) )
+```
 
+A commonly used alternative to RCSs for modeling nonlinear effects of continuous predictors are polynomial regressions, where we include values of $x$ raised to higher powers (e.g., $x^2$ for a quadratic effect). Let's run a competing polynomial regression model that invests the same number of $df$ as the RCS model we ran previously. We can use the **pol()** function to run a quintic polynomial regression with $df=5$.    
+```{r}
+ols.pol5 <- ols( y ~ pol( x, 5 ), data = mdata )
+```
+
+Now we can compare indices of model fit across the RCS and polynomial models. We can see that the $R^2$ value is slightly larger in the RCS model compared to the quintic polynomial (0.89 vs. 0.84), though both do quite well in fitting the data.
+```{r}
+ols.model <- c('6-Knot RCS','Quintic Polynomial')
+ols.r2 <- c( ols.rcs5$stats[4], ols.pol5$stats[4] )
+ols.fit <- data.frame( rbind( ols.model, ols.r2 )  )
+ols.fit
 ```
 
 
+We can better see how well the RCS and quintic polynomial models do in capturing the data by plotting the model predictions against the observed data. In the plot below, the vertical dashed lines show where the 5 RCS knots are located. Both do a good job fitting the data, but the RCS model better captures the drop and rise in $y$ than the polynomial model. Also, the polynomial model prediction line curves up after the final knot on the far right end of the $x$ distribution, whereas the RCS model constrains the line to be linear (straight) in the extremes of the distribution, beyond the first and last knots. 
 ```{r}
 ols.rcs5.pred <- Predict( ols.rcs5, x ) 
 ols.pol5.pred <- Predict( ols.pol5, x ) 
@@ -143,9 +153,9 @@ ols.pred5.plot
 
 ## GLS Model with ERP Data
 
+In this section, we'll use data from the [ERP package](https://cran.r-project.org/web/packages/ERP/vignettes/ERP.html) to model event-related potential (ERP) trajectories. I use these data because ERP amplitudes follow complex nonlinear trajectories. The impulsivity data from the ERP package is in the wide format with repeated measures of amplitude stored in multiple columns. Below, we reshape the data so that it is in the long format. 
 ```{r}
 data(impulsivity)
-dim(impulsivity)
 
 impulsivity1 <- subset( impulsivity, !duplicated( impulsivity$Subject ) )
 
@@ -160,6 +170,7 @@ imp <- reshape( impulsivity1,
 ```
 
 
+Now that the data is in the appropriate format, we can model longitudinal trajectories using RCSs. As these are repeated measures data, we'll use GLS models with a first-order autoregressive error structure (AR1) to capture non-independence in the errors over time. As we don't know how many knots are needed for the RCSs to obtain a reasonable fir, below I fit GLS models modeling the effect of time with 8-, 7-, and 6-knot RCSs. We can compare the Akaike Information Criterion for each of these models to aid in model selection [(Harrell 2015)](https://www.amazon.com/Regression-Modeling-Strategies-Applications-Statistics/dp/3319194240). The model with the smallest AIC value will be considered the one that best captures the effect of x on y without overfitting. The 7-knot RCS model ($df=6$ invested in the time effect) is best according to the AIC. 
 ```{r}
 ddimp <- datadist( imp )
 options( datadist = ddimp )
@@ -196,22 +207,24 @@ data.frame( AIC = c(imp.rcs7.aic, imp.rcs6.aic, imp.rcs5.aic ),
             DF = c( 7, 6, 5 ) )
 ```
 
-
+Evaluate the 6-knot RCS model. The time effects are all non-zero and the coefficients change sign indicating change in direction of the regression slope.
 ```{r}
 print( imp.rcs6 )
 anova( imp.rcs6 )
 ```
 
+Below I fit a sextic polynomial model for comparison.
 ```{r}
 # imp.pol6 <- Gls( T_0 ~ pol( time, 6 ),
 #                  correlation = corAR1( form = ~time | Subject  ),
 #                  data = imp,
 #                  x = T )
-# save( imp.pol6, file='imp.pol6.RData' )
+#save( imp.pol6, file='imp.pol6.RData' )
 load( 'imp.pol6.RData' )
 ```
 
 
+Plotting the predicted values from the 6-knot RCS model and the sextic polynomial function. Again, the 7-knot RCS model is better able to capture the initial decline and then rapid rise in amplitude between the 1st and 3rd knots than the polynomial function with the same number of degrees of freedom invested in the time effect.
 ```{r}
 imp.rcs6.pred <- data.frame( Predict( imp.rcs6, time ) )
 imp.rcs6.pred$model <- '7-Knot RC Spline'
@@ -234,6 +247,9 @@ impplot <- ggplot( ) +
   theme( legend.position = 'bottom' )
 impplot
 ```
+
+## Latent Growth Curve Model: Simulated Data
+Now we can apply the 
 
 ## Latent Growth Curve Model: Perceived Stress Trajectories
 
