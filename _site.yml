@@ -2,8 +2,6 @@ name: "rcsplines"
 navbar:
   title: "Applications of Restricted Cubic Splines in SEM"
   left:
-    - text: "Purpose"
-      href: about.html
     - text: "Demonstrations"
       href: index.html
 output:
