@@ -23,7 +23,7 @@ knitr::opts_chunk$set(echo = TRUE,
 ## Overview
 The purpose of this page is to demonstrate how restricted cubic splines (RCSs) to model nonlinear effects of predictors and nonlinear growth trajectories within a structural equation models (SEMs). First, I will show how to implement RCSs in ordinary least squares (OLS) and generalized least square (GLS) models. Then I will show how to implement RCSs in the context of SEMs.
 
-** This is a work-in-progress. Please let me know if you spot any errors or have suggestions.**
+**This is a work in progress. Please if you spot any errors or have suggestions:** [brunwasser@rowan.edu](mailto:brunwasser@rowan.edu)
 
 ## Workspace Prep
 Load require package. You may have to install these packages if you have never installed them before using the **install.packages()** function. 
