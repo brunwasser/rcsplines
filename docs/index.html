@@ -11,7 +11,7 @@
 
 <meta name="author" content="Steven M. Brunwasser, Ph.D." />
 
-<meta name="date" content="2022-11-18" />
+<meta name="date" content="2022-11-19" />
 
 <title>Using Restricted Cubic Splines in Structural Equation Models</title>
 
@@ -447,7 +447,7 @@ div.tocify {
 <h1 class="title toc-ignore">Using Restricted Cubic Splines in
 Structural Equation Models</h1>
 <h4 class="author">Steven M. Brunwasser, Ph.D.</h4>
-<h4 class="date">2022-11-18</h4>
+<h4 class="date">2022-11-19</h4>
 
 </div>
 
@@ -464,6 +464,8 @@ growth trajectories within a structural equation models (SEMs). First, I
 will show how to implement RCSs in ordinary least squares (OLS) and
 generalized least square (GLS) models. Then I will show how to implement
 RCSs in the context of SEMs.</p>
+<p>** This is a work-in-progress. Please let me know if you spot any
+errors or have suggestions.**</p>
 </div>
 <div id="workspace-prep" class="section level2">
 <h2>Workspace Prep</h2>
@@ -476,7 +478,9 @@ have never installed them before using the
 <span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a><span class="fu">require</span>( rms )</span>
 <span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a><span class="fu">require</span>( Hmisc )</span>
 <span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a><span class="fu">require</span>( lavaan )</span>
-<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a><span class="fu">require</span>( ERP )</span></code></pre></div>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a><span class="fu">require</span>( ERP )</span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a><span class="fu">require</span>( MASS )</span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a><span class="fu">require</span>( nlme )</span></code></pre></div>
 </div>
 <div id="demonstration-in-ols-regression" class="section level2">
 <h2>Demonstration in OLS regression</h2>
@@ -837,12 +841,302 @@ of degrees of freedom invested in the time effect.</p>
 class="section level2">
 <h2>Latent Growth Curve Model: Simulated Data</h2>
 <p>Now we can apply the</p>
+<p>I adapt <a
+href="https://www.rdocumentation.org/packages/rms/versions/6.3-0/topics/Gls">code</a>
+from the <em>rms</em> package documentation to simulate longitudinal
+data in the “long” format, with as many rows per participant (<span
+class="math inline">\(N=500\)</span>) as there are time points. The
+outcome variable is continuous and is measured at 10 time points.</p>
+<div class="sourceCode" id="cb25"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb25-1"><a href="#cb25-1" aria-hidden="true" tabindex="-1"></a>ns  <span class="ot">&lt;-</span> <span class="dv">500</span>  <span class="co"># no. subjects</span></span>
+<span id="cb25-2"><a href="#cb25-2" aria-hidden="true" tabindex="-1"></a>nt  <span class="ot">&lt;-</span> <span class="dv">10</span>  <span class="co"># no. time points/subject</span></span>
+<span id="cb25-3"><a href="#cb25-3" aria-hidden="true" tabindex="-1"></a>           <span class="co"># usually do 100 for variances, 1000 for nonparametric CLs</span></span>
+<span id="cb25-4"><a href="#cb25-4" aria-hidden="true" tabindex="-1"></a>rho <span class="ot">&lt;-</span> .<span class="dv">5</span>  <span class="co"># AR(1) correlation parameter</span></span>
+<span id="cb25-5"><a href="#cb25-5" aria-hidden="true" tabindex="-1"></a>V <span class="ot">&lt;-</span> <span class="fu">matrix</span>(<span class="dv">0</span>, <span class="at">nrow=</span>nt, <span class="at">ncol=</span>nt)</span>
+<span id="cb25-6"><a href="#cb25-6" aria-hidden="true" tabindex="-1"></a>V <span class="ot">&lt;-</span> rho<span class="sc">^</span><span class="fu">abs</span>(<span class="fu">row</span>(V)<span class="sc">-</span><span class="fu">col</span>(V))   <span class="co"># per-subject correlation/covariance matrix</span></span>
+<span id="cb25-7"><a href="#cb25-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb25-8"><a href="#cb25-8" aria-hidden="true" tabindex="-1"></a>d <span class="ot">&lt;-</span> <span class="fu">expand.grid</span>(<span class="at">tim=</span><span class="dv">1</span><span class="sc">:</span>nt, <span class="at">id=</span><span class="dv">1</span><span class="sc">:</span>ns)</span>
+<span id="cb25-9"><a href="#cb25-9" aria-hidden="true" tabindex="-1"></a>d<span class="sc">$</span>trt <span class="ot">&lt;-</span> <span class="fu">factor</span>(<span class="fu">ifelse</span>(d<span class="sc">$</span>id <span class="sc">&lt;=</span> ns<span class="sc">/</span><span class="dv">2</span>, <span class="st">&#39;a&#39;</span>, <span class="st">&#39;b&#39;</span>))</span>
+<span id="cb25-10"><a href="#cb25-10" aria-hidden="true" tabindex="-1"></a>true.beta <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="at">Intercept=</span><span class="dv">0</span>,<span class="at">tim=</span>.<span class="dv">1</span>,<span class="st">&#39;tim^2&#39;</span><span class="ot">=</span><span class="dv">0</span>,<span class="st">&#39;trt=b&#39;</span><span class="ot">=</span><span class="dv">1</span>)</span>
+<span id="cb25-11"><a href="#cb25-11" aria-hidden="true" tabindex="-1"></a>d<span class="sc">$</span>ey  <span class="ot">&lt;-</span> true.beta[<span class="st">&#39;Intercept&#39;</span>] <span class="sc">+</span> true.beta[<span class="st">&#39;tim&#39;</span>]<span class="sc">*</span>d<span class="sc">$</span>tim <span class="sc">+</span></span>
+<span id="cb25-12"><a href="#cb25-12" aria-hidden="true" tabindex="-1"></a>  true.beta[<span class="st">&#39;tim^2&#39;</span>]<span class="sc">*</span>(d<span class="sc">$</span>tim<span class="sc">^</span><span class="dv">2</span>) <span class="sc">+</span>  true.beta[<span class="st">&#39;trt=b&#39;</span>]<span class="sc">*</span>(d<span class="sc">$</span>trt<span class="sc">==</span><span class="st">&#39;b&#39;</span>)</span>
+<span id="cb25-13"><a href="#cb25-13" aria-hidden="true" tabindex="-1"></a><span class="fu">set.seed</span>(<span class="dv">13</span>)</span>
+<span id="cb25-14"><a href="#cb25-14" aria-hidden="true" tabindex="-1"></a>d<span class="sc">$</span>y <span class="ot">&lt;-</span> d<span class="sc">$</span>ey <span class="sc">+</span> <span class="fu">as.vector</span>(<span class="fu">t</span>(<span class="fu">mvrnorm</span>(<span class="at">n=</span>ns, <span class="at">mu=</span><span class="fu">rep</span>(<span class="dv">0</span>,nt), <span class="at">Sigma=</span>V)))</span>
+<span id="cb25-15"><a href="#cb25-15" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb25-16"><a href="#cb25-16" aria-hidden="true" tabindex="-1"></a><span class="fu">head</span>( d )</span></code></pre></div>
+<pre><code>##   tim id trt  ey          y
+## 1   1  1   a 0.1  0.5882726
+## 2   2  1   a 0.2  0.3848211
+## 3   3  1   a 0.3  0.2521702
+## 4   4  1   a 0.4 -0.1599721
+## 5   5  1   a 0.5  0.4922491
+## 6   6  1   a 0.6  1.0155186</code></pre>
+<p>The data need to be converted to a “wide” format do that there are as
+many columns for y as there are time points in order to run latent
+growth curve analyses.</p>
+<div class="sourceCode" id="cb27"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb27-1"><a href="#cb27-1" aria-hidden="true" tabindex="-1"></a>dwide <span class="ot">&lt;-</span> <span class="fu">reshape</span>( d, </span>
+<span id="cb27-2"><a href="#cb27-2" aria-hidden="true" tabindex="-1"></a>                  <span class="at">v.names =</span> <span class="st">&#39;y&#39;</span>,</span>
+<span id="cb27-3"><a href="#cb27-3" aria-hidden="true" tabindex="-1"></a>                  <span class="at">idvar =</span> <span class="st">&#39;id&#39;</span>,</span>
+<span id="cb27-4"><a href="#cb27-4" aria-hidden="true" tabindex="-1"></a>                  <span class="at">timevar =</span> <span class="st">&#39;tim&#39;</span>,</span>
+<span id="cb27-5"><a href="#cb27-5" aria-hidden="true" tabindex="-1"></a>                  <span class="at">drop =</span> <span class="st">&#39;ey&#39;</span>,</span>
+<span id="cb27-6"><a href="#cb27-6" aria-hidden="true" tabindex="-1"></a>                  <span class="at">direction =</span> <span class="st">&#39;wide&#39;</span>,</span>
+<span id="cb27-7"><a href="#cb27-7" aria-hidden="true" tabindex="-1"></a>                  <span class="at">sep=</span><span class="st">&#39;&#39;</span>)</span>
+<span id="cb27-8"><a href="#cb27-8" aria-hidden="true" tabindex="-1"></a><span class="fu">head</span>( dwide )</span></code></pre></div>
+<pre><code>##    id trt          y1          y2          y3         y4         y5         y6
+## 1   1   a  0.58827257  0.38482114  0.25217024 -0.1599721  0.4922491  1.0155186
+## 11  2   a  0.03617872 -0.25982652 -0.60129670 -0.1308699  0.4330295  0.4124045
+## 21  3   a -0.06226558  0.66983650 -0.06613045 -1.9655144 -1.7573864 -1.1152684
+## 31  4   a  1.38961926  2.05595014  0.48393874 -0.0909192  0.6643151  0.8747693
+## 41  5   a -0.23180750 -0.45156763 -1.31328486 -0.9097320 -1.6767800  0.9190582
+## 51  6   a -0.06663219  0.06952871  0.67336023  0.8823301  0.9233409  1.6596319
+##             y7          y8          y9        y10
+## 1   0.06412915 -0.03155166  0.08529256 -0.4500277
+## 11  1.05727635  1.65434938  2.36778901  3.1373330
+## 21  0.60034262  0.44959370  0.16941534  0.4667622
+## 31  0.65607181 -0.49444170 -0.95592965  0.1522094
+## 41  0.42395932  1.39810455  1.12466302  0.7306459
+## 51 -0.60631723 -0.91693728 -0.60780628  0.6470781</code></pre>
+<div class="sourceCode" id="cb29"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb29-1"><a href="#cb29-1" aria-hidden="true" tabindex="-1"></a>dwide<span class="sc">$</span>trt <span class="ot">&lt;-</span> <span class="fu">as.numeric</span>( dwide<span class="sc">$</span>trt ) <span class="sc">-</span> <span class="dv">1</span></span></code></pre></div>
+<p>Now we can set up the latent growth curve model using the <a
+href="https://www.lavaan.ugent.be/">lavaan</a> package. We want to model
+the effect of time using a restricted cubic spline. Unlike in standard
+regression models where time effects are captured by observed variables
+included in the dataset, time effects are captured by latent
+(unobserved) intercept &amp; slope variables (“growth factors”) in
+latent growth curve (LGC) models. The factor loadings are (typically)
+fixed at values selected to model a specific trajectory shape. To model
+a nonlinear trajectory using a restricted cubic spline, we need to have
+<span class="math inline">\(k-1\)</span> latent slope variables to
+capture the time effect. For this example, I will model a 3-knot RCS
+effect for time (<span class="math inline">\(df=2\)</span>) with knots
+at time points 2, 5, and 9 – so we will need to latent slope factors.
+Note, this is the same number of <span class="math inline">\(df\)</span>
+that would be required to estimate a quadratic growth model. The
+question is: How do we constrain the factor loadings in order to
+estimate the appropriate restricted cubic spline trajectory.
+Unfortunately, I don’t know of any existing functions equivalent to
+<em>rms</em> function <strong>rcs()</strong> that can automate this
+process when using the <em>lavaan</em> package. However, the
+<strong>rcspline.eval()</strong> function from the <em>Hmisc</em>
+package can help us so that we don’t have to figure it manually. The
+values for the factor loadings of the two latent slopes are provided
+below. Note, the first slope is linear and the second captures the
+nonlinear effect.</p>
+<div class="sourceCode" id="cb30"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb30-1"><a href="#cb30-1" aria-hidden="true" tabindex="-1"></a>long.spline <span class="ot">&lt;-</span> <span class="fu">data.frame</span>( <span class="fu">rcspline.eval</span>( d<span class="sc">$</span>tim, <span class="at">nk =</span> <span class="dv">3</span>, <span class="at">knots =</span> <span class="fu">c</span>( <span class="dv">2</span>, <span class="dv">5</span>, <span class="dv">9</span> ), <span class="at">inclx =</span> T) )</span>
+<span id="cb30-2"><a href="#cb30-2" aria-hidden="true" tabindex="-1"></a><span class="fu">colnames</span>( long.spline ) <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="st">&#39;rcs1&#39;</span>,<span class="st">&#39;rcs2&#39;</span>)</span>
+<span id="cb30-3"><a href="#cb30-3" aria-hidden="true" tabindex="-1"></a>long.spline1 <span class="ot">&lt;-</span> long.spline[ <span class="fu">unique</span>( long.spline<span class="sc">$</span>rcs1 ), ]</span></code></pre></div>
+<p>We now specify a latent growth curve model just as you <a
+href="https://www.lavaan.ugent.be/tutorial/growth.html">typically
+would</a>, except using the the factor loadings for the two latent
+slopes we obtained above. We’ll also evaluate the effect of the
+treatment variable on the outcome trajectories by regressing the
+intercept &amp; slopes on the <em>trt</em> variable.</p>
+<div class="sourceCode" id="cb31"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb31-1"><a href="#cb31-1" aria-hidden="true" tabindex="-1"></a>sim.lgc1 <span class="ot">&lt;-</span> <span class="st">&#39;</span></span>
+<span id="cb31-2"><a href="#cb31-2" aria-hidden="true" tabindex="-1"></a><span class="st">## Define the latent intecept</span></span>
+<span id="cb31-3"><a href="#cb31-3" aria-hidden="true" tabindex="-1"></a><span class="st">i =~ 1*y1 + 1*y2 + 1*y3 + 1*y4 + 1*y5 + 1*y6 + 1*y7 + 1*y8 + 1*y9 + 1*y10</span></span>
+<span id="cb31-4"><a href="#cb31-4" aria-hidden="true" tabindex="-1"></a><span class="st">## Define the two latent slopes using the factor loading values obtained above</span></span>
+<span id="cb31-5"><a href="#cb31-5" aria-hidden="true" tabindex="-1"></a><span class="st">rcs1 =~ 1*y1 + 2*y2 + 3*y3 + 4*y4 + 5*y5 + 6*y6 + 7*y7 + 8*y8 + 9*y9 + 10*y10</span></span>
+<span id="cb31-6"><a href="#cb31-6" aria-hidden="true" tabindex="-1"></a><span class="st">rcs2 =~ 0*y1 + 0*y2 + 0.02040816*y3 + 0.16326531*y4 + 0.55102041*y5 + 1.27040816*y6 + 2.26530612*y7 + 3.44387755*y8 + 4.71428571*y9 + 6*y10</span></span>
+<span id="cb31-7"><a href="#cb31-7" aria-hidden="true" tabindex="-1"></a><span class="st">## Hold error variances constant over time</span></span>
+<span id="cb31-8"><a href="#cb31-8" aria-hidden="true" tabindex="-1"></a><span class="st">y1 ~~ e*y1; y2 ~~ e*y2; y3 ~~ e*y3; y4 ~~ e*y4; y5 ~~ e*y5; y6 ~~ e*y6; y7 ~~ e*y7; y8 ~~ e*y8; y9 ~~ e*y9; y10 ~~ e*y10</span></span>
+<span id="cb31-9"><a href="#cb31-9" aria-hidden="true" tabindex="-1"></a><span class="st">## Regress growth factors on treatment</span></span>
+<span id="cb31-10"><a href="#cb31-10" aria-hidden="true" tabindex="-1"></a><span class="st">i + rcs1 + rcs2 ~ trt</span></span>
+<span id="cb31-11"><a href="#cb31-11" aria-hidden="true" tabindex="-1"></a><span class="st">&#39;</span></span>
+<span id="cb31-12"><a href="#cb31-12" aria-hidden="true" tabindex="-1"></a>sim.lgc1.fit <span class="ot">&lt;-</span> <span class="fu">growth</span>( sim.lgc1, <span class="at">data =</span> dwide, <span class="at">auto.cov.y =</span>F, <span class="at">auto.var =</span> F )</span></code></pre></div>
+<p>We can then use the summary function to see the results. The
+<em>trt</em> variable has an effect on the latent intercept and first
+(linear) RCS latent slope.</p>
+<div class="sourceCode" id="cb32"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb32-1"><a href="#cb32-1" aria-hidden="true" tabindex="-1"></a><span class="fu">summary</span>( sim.lgc1.fit )</span></code></pre></div>
+<pre><code>## lavaan 0.6-11 ended normally after 41 iterations
+## 
+##   Estimator                                         ML
+##   Optimization method                           NLMINB
+##   Number of model parameters                        22
+##   Number of equality constraints                     9
+##                                                       
+##   Number of observations                           500
+##                                                       
+## Model Test User Model:
+##                                                       
+##   Test statistic                               351.684
+##   Degrees of freedom                                62
+##   P-value (Chi-square)                           0.000
+## 
+## Parameter Estimates:
+## 
+##   Standard errors                             Standard
+##   Information                                 Expected
+##   Information saturated (h1) model          Structured
+## 
+## Latent Variables:
+##                    Estimate  Std.Err  z-value  P(&gt;|z|)
+##   i =~                                                
+##     y1                1.000                           
+##     y2                1.000                           
+##     y3                1.000                           
+##     y4                1.000                           
+##     y5                1.000                           
+##     y6                1.000                           
+##     y7                1.000                           
+##     y8                1.000                           
+##     y9                1.000                           
+##     y10               1.000                           
+##   rcs1 =~                                             
+##     y1                1.000                           
+##     y2                2.000                           
+##     y3                3.000                           
+##     y4                4.000                           
+##     y5                5.000                           
+##     y6                6.000                           
+##     y7                7.000                           
+##     y8                8.000                           
+##     y9                9.000                           
+##     y10              10.000                           
+##   rcs2 =~                                             
+##     y1                0.000                           
+##     y2                0.000                           
+##     y3                0.020                           
+##     y4                0.163                           
+##     y5                0.551                           
+##     y6                1.270                           
+##     y7                2.265                           
+##     y8                3.444                           
+##     y9                4.714                           
+##     y10               6.000                           
+## 
+## Regressions:
+##                    Estimate  Std.Err  z-value  P(&gt;|z|)
+##   i ~                                                 
+##     trt               0.885    0.114    7.752    0.000
+##   rcs1 ~                                              
+##     trt               0.013    0.033    0.391    0.696
+##   rcs2 ~                                              
+##     trt              -0.021    0.044   -0.475    0.635
+## 
+## Covariances:
+##                    Estimate  Std.Err  z-value  P(&gt;|z|)
+##  .i ~~                                                
+##    .rcs1             -0.231    0.028   -8.398    0.000
+##    .rcs2              0.220    0.034    6.504    0.000
+##  .rcs1 ~~                                             
+##    .rcs2             -0.098    0.011   -8.861    0.000
+## 
+## Intercepts:
+##                    Estimate  Std.Err  z-value  P(&gt;|z|)
+##    .y1                0.000                           
+##    .y2                0.000                           
+##    .y3                0.000                           
+##    .y4                0.000                           
+##    .y5                0.000                           
+##    .y6                0.000                           
+##    .y7                0.000                           
+##    .y8                0.000                           
+##    .y9                0.000                           
+##    .y10               0.000                           
+##    .i                 0.063    0.081    0.779    0.436
+##    .rcs1              0.090    0.023    3.914    0.000
+##    .rcs2              0.018    0.031    0.576    0.565
+## 
+## Variances:
+##                    Estimate  Std.Err  z-value  P(&gt;|z|)
+##    .y1         (e)    0.575    0.014   41.833    0.000
+##    .y2         (e)    0.575    0.014   41.833    0.000
+##    .y3         (e)    0.575    0.014   41.833    0.000
+##    .y4         (e)    0.575    0.014   41.833    0.000
+##    .y5         (e)    0.575    0.014   41.833    0.000
+##    .y6         (e)    0.575    0.014   41.833    0.000
+##    .y7         (e)    0.575    0.014   41.833    0.000
+##    .y8         (e)    0.575    0.014   41.833    0.000
+##    .y9         (e)    0.575    0.014   41.833    0.000
+##    .y10        (e)    0.575    0.014   41.833    0.000
+##    .i                 1.017    0.104    9.763    0.000
+##    .rcs1              0.080    0.008    9.475    0.000
+##    .rcs2              0.146    0.016    9.280    0.000</code></pre>
+<p>Now let’s run a similar model in a mixed-effects modeling framework
+using the <a
+href="https://www.rdocumentation.org/packages/nlme/versions/3.1-160">nlme
+package</a> to see if we get a similar result. We will use the “long”
+simulated data file to run these analyses.</p>
+<p>When you call the <strong>rcs()</strong> function, <span
+class="math inline">\(k-1\)</span> new variables are created</p>
+<div class="sourceCode" id="cb34"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb34-1"><a href="#cb34-1" aria-hidden="true" tabindex="-1"></a>timspline <span class="ot">&lt;-</span> <span class="fu">data.frame</span>( <span class="fu">rcspline.eval</span>( d<span class="sc">$</span>tim , <span class="at">nk =</span> <span class="dv">3</span>, <span class="at">knots =</span> <span class="fu">c</span>(<span class="dv">2</span>,<span class="dv">5</span>,<span class="dv">9</span> ), <span class="at">inclx =</span> T ) )</span>
+<span id="cb34-2"><a href="#cb34-2" aria-hidden="true" tabindex="-1"></a><span class="fu">colnames</span>( timspline ) <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="st">&#39;rcs1&#39;</span>,<span class="st">&#39;rcs2&#39;</span> )</span>
+<span id="cb34-3"><a href="#cb34-3" aria-hidden="true" tabindex="-1"></a>d1 <span class="ot">&lt;-</span> <span class="fu">cbind</span>( d, timspline )</span>
+<span id="cb34-4"><a href="#cb34-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb34-5"><a href="#cb34-5" aria-hidden="true" tabindex="-1"></a>lme.sim1 <span class="ot">&lt;-</span> <span class="fu">lme</span>(  y <span class="sc">~</span> rcs1<span class="sc">*</span>trt <span class="sc">+</span> rcs2<span class="sc">*</span>trt, </span>
+<span id="cb34-6"><a href="#cb34-6" aria-hidden="true" tabindex="-1"></a>                  <span class="at">random =</span><span class="sc">~</span> rcs1 <span class="sc">+</span> rcs2 <span class="sc">|</span> id, </span>
+<span id="cb34-7"><a href="#cb34-7" aria-hidden="true" tabindex="-1"></a>                  <span class="at">data =</span> d1  )</span></code></pre></div>
+<p>Let’s look at the coefficients from the mixed-effects model.</p>
+<div class="sourceCode" id="cb35"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb35-1"><a href="#cb35-1" aria-hidden="true" tabindex="-1"></a><span class="fu">summary</span>( lme.sim1 )</span></code></pre></div>
+<pre><code>## Linear mixed-effects model fit by REML
+##   Data: d1 
+##        AIC      BIC    logLik
+##   13265.32 13350.02 -6619.658
+## 
+## Random effects:
+##  Formula: ~rcs1 + rcs2 | id
+##  Structure: General positive-definite, Log-Cholesky parametrization
+##             StdDev    Corr         
+## (Intercept) 1.0115544 (Intr) rcs1  
+## rcs1        0.2840859 -0.810       
+## rcs2        0.3828794  0.573 -0.905
+## Residual    0.7579719              
+## 
+## Fixed effects:  y ~ rcs1 * trt + rcs2 * trt 
+##                  Value  Std.Error   DF   t-value p-value
+## (Intercept)  0.0628994 0.08091218 4496  0.777379  0.4370
+## rcs1         0.0900480 0.02305367 4496  3.906015  0.0001
+## trtb         0.8852288 0.11442711  498  7.736181  0.0000
+## rcs2         0.0180322 0.03138243 4496  0.574597  0.5656
+## rcs1:trtb    0.0127186 0.03260281 4496  0.390109  0.6965
+## trtb:rcs2   -0.0210199 0.04438145 4496 -0.473618  0.6358
+##  Correlation: 
+##           (Intr) rcs1   trtb   rcs2   rcs1:t
+## rcs1      -0.849                            
+## trtb      -0.707  0.600                     
+## rcs2       0.642 -0.916 -0.454              
+## rcs1:trtb  0.600 -0.707 -0.849  0.647       
+## trtb:rcs2 -0.454  0.647  0.642 -0.707 -0.916
+## 
+## Standardized Within-Group Residuals:
+##          Min           Q1          Med           Q3          Max 
+## -3.213308557 -0.599892914  0.009641107  0.602968349  3.623615406 
+## 
+## Number of Observations: 5000
+## Number of Groups: 500</code></pre>
+<p>And now the equivalent coefficients from the latent growth model.</p>
+<div class="sourceCode" id="cb37"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb37-1"><a href="#cb37-1" aria-hidden="true" tabindex="-1"></a>sim.lgc1.par <span class="ot">&lt;-</span> <span class="fu">parameterEstimates</span>( sim.lgc1.fit )</span>
+<span id="cb37-2"><a href="#cb37-2" aria-hidden="true" tabindex="-1"></a>sim.lgc1.par[ <span class="fu">c</span>(<span class="dv">62</span>,<span class="dv">63</span>,<span class="dv">64</span>,<span class="dv">41</span>,<span class="dv">42</span>,<span class="dv">43</span>), <span class="fu">c</span>(<span class="st">&#39;lhs&#39;</span>,<span class="st">&#39;op&#39;</span>,<span class="st">&#39;rhs&#39;</span>,<span class="st">&#39;est&#39;</span>,<span class="st">&#39;se&#39;</span>,<span class="st">&#39;ci.lower&#39;</span>,<span class="st">&#39;ci.upper&#39;</span>)]</span></code></pre></div>
+<pre><code>##     lhs op rhs    est    se ci.lower ci.upper
+## 62    i ~1      0.063 0.081   -0.095    0.221
+## 63 rcs1 ~1      0.090 0.023    0.045    0.135
+## 64 rcs2 ~1      0.018 0.031   -0.043    0.079
+## 41    i  ~ trt  0.885 0.114    0.661    1.109
+## 42 rcs1  ~ trt  0.013 0.033   -0.051    0.076
+## 43 rcs2  ~ trt -0.021 0.044   -0.108    0.066</code></pre>
+<p>You can see that the results are essentially identical. This confirms
+that we can apply RCSs within a latent growth curve model to capture
+nonlinear trajectories by constraining the factor loadings of the latent
+slope factors just as you would constrain the values of time variables
+within a standard regression framework.</p>
 </div>
 <div id="latent-growth-curve-model-perceived-stress-trajectories"
 class="section level2">
 <h2>Latent Growth Curve Model: Perceived Stress Trajectories</h2>
-<div class="sourceCode" id="cb25"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb25-1"><a href="#cb25-1" aria-hidden="true" tabindex="-1"></a><span class="fu">load</span>( <span class="st">&#39;cts.splines.Rdata&#39;</span> )</span>
-<span id="cb25-2"><a href="#cb25-2" aria-hidden="true" tabindex="-1"></a><span class="fu">html</span>( <span class="fu">describe</span>( cts.splines ) )</span></code></pre></div>
+<p>Now let’s apply the RCS approach using real longitudinal data from
+the College Transition Study. In this study, incoming college students
+completed mental health surveys 8 times during their first semester at a
+large university (twice per month during the fall semester). To
+demonstrate the use of RCSs, we will model perceived stress trajectories
+assuming a nonlinear trajectory defined by an unknown function that we
+hope can be well estimated using a 3-knot RCS. We will evaluate whether
+a continuous predictor (measuring students dysfunctional beliefs)
+predicts perceived stress trajectories. We don’t want to assume that
+dysfunctional attitudes predicts perceived stress in a linear fashion,
+so we will use a 3-knot RCS to allow for a flexible nonlinear
+effect.</p>
+<p>Load in the data.</p>
+<div class="sourceCode" id="cb39"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb39-1"><a href="#cb39-1" aria-hidden="true" tabindex="-1"></a><span class="fu">load</span>( <span class="st">&#39;cts.splines.Rdata&#39;</span> )</span>
+<span id="cb39-2"><a href="#cb39-2" aria-hidden="true" tabindex="-1"></a><span class="fu">html</span>( <span class="fu">describe</span>( cts.splines ) )</span></code></pre></div>
 <meta http-equiv="Content-Type" content="text/html; charset=utf-8" /> 
 <script type="text/javascript">
 <!--
@@ -888,63 +1182,63 @@ bottom: -1ex;
 </style>
  <font color="MidnightBlue"><div align=center><span style="font-weight:bold">cts.splines <br><br> 5  Variables   656  Observations</span></div></font> <hr class="thinhr"> <span style="font-weight:bold">id</span>: Unique participant identifier<div style='float: right; text-align: right;'><img src="data:image/png;base64,
 iVBORw0KGgoAAAANSUhEUgAAAJcAAAANCAMAAACTvAxuAAAACVBMVEUAAADMzMz////1iUV5AAAAYUlEQVQ4je2TMQpAMQhDG+9/6E9rItROfyh0iIupeUgoOICRhVmUW5M+ASk6aBNO0XctW0wCxZUdwUfMotya9AlI0Yk24TT6rmWLSaC4sp3LuW7m8j3++y/ncq6buR69xw9LQQTEAnSbxwAAAABJRU5ErkJggg==" alt="image" /></div> <style>
- .hmisctable179102 {
+ .hmisctable587286 {
  border: none;
  font-size: 85%;
  }
- .hmisctable179102 td {
+ .hmisctable587286 td {
  text-align: center;
  padding: 0 1ex 0 1ex;
  }
- .hmisctable179102 th {
+ .hmisctable587286 th {
  color: MidnightBlue;
  text-align: center;
  padding: 0 1ex 0 1ex;
  font-weight: normal;
  }
  </style>
- <table class="hmisctable179102">
+ <table class="hmisctable587286">
  <tr><th>n</th><th>missing</th><th>distinct</th></tr>
  <tr><td>656</td><td>0</td><td>82</td></tr>
  </table>
  <span style="font-size: 85%;"><font color="MidnightBlue">lowest</font> : 1074614  1765339  2882872  4269441  8864786  ,  <font color="MidnightBlue">highest</font>: 98980864 99999996 99999997 99999998 99999999</span> <hr class="thinhr"> <span style="font-weight:bold">psstot</span>: Composite Perceived Stress Score<div style='float: right; text-align: right;'><img src="data:image/png;base64,
 iVBORw0KGgoAAAANSUhEUgAAAH8AAAANCAMAAAC3iUHrAAAACVBMVEUAAADMzMz////1iUV5AAAAhklEQVQ4jdWTiwrAIAhFr/v/j16PNXpo6laDiagYeQxuoOcGvLhcZhx+Q7CcuxgCnAOX8JOXvIcvsz7g36MHFtf7F98i8RBbHxpdb5H+K6E53l+LU3//BC6ADHz7FsL5DLSFj6pQQD6+sgGPXcMXvkWzUdQqosIZRQtCN+ifa9NFSjVySXQCxaYH70IapV4AAAAASUVORK5CYII=" alt="image" /></div> <style>
- .hmisctable801649 {
+ .hmisctable433680 {
  border: none;
  font-size: 85%;
  }
- .hmisctable801649 td {
+ .hmisctable433680 td {
  text-align: center;
  padding: 0 1ex 0 1ex;
  }
- .hmisctable801649 th {
+ .hmisctable433680 th {
  color: MidnightBlue;
  text-align: center;
  padding: 0 1ex 0 1ex;
  font-weight: normal;
  }
  </style>
- <table class="hmisctable801649">
+ <table class="hmisctable433680">
  <tr><th>n</th><th>missing</th><th>distinct</th><th>Info</th><th>Mean</th><th>Gmd</th><th>.05</th><th>.10</th><th>.25</th><th>.50</th><th>.75</th><th>.90</th><th>.95</th></tr>
  <tr><td>607</td><td>49</td><td>42</td><td>0.998</td><td>22.5</td><td>8.82</td><td>10</td><td>12</td><td>17</td><td>23</td><td>28</td><td>32</td><td>35</td></tr>
  </table>
  <span style="font-size: 85%;"><font color="MidnightBlue">lowest</font> :  3  4  5  6  7 ,  <font color="MidnightBlue">highest</font>: 41 42 43 44 45</span> <hr class="thinhr"> <span style="font-weight:bold">sex</span>: Participant-Reported Sex <style>
- .hmisctable353050 {
+ .hmisctable243469 {
  border: none;
  font-size: 85%;
  }
- .hmisctable353050 td {
+ .hmisctable243469 td {
  text-align: center;
  padding: 0 1ex 0 1ex;
  }
- .hmisctable353050 th {
+ .hmisctable243469 th {
  color: MidnightBlue;
  text-align: center;
  padding: 0 1ex 0 1ex;
  font-weight: normal;
  }
  </style>
- <table class="hmisctable353050">
+ <table class="hmisctable243469">
  <tr><th>n</th><th>missing</th><th>distinct</th></tr>
  <tr><td>656</td><td>0</td><td>2</td></tr>
  </table>
@@ -961,43 +1255,43 @@ iVBORw0KGgoAAAANSUhEUgAAAJcAAAANCAMAAACTvAxuAAAACVBMVEUAAADMzMz////1iUV5AAAAi0lE
    -19.528    -2.528    15.472    38.472    54.472 
  </pre>
  <style>
- .hmisctable594728 {
+ .hmisctable553944 {
  border: none;
  font-size: 85%;
  }
- .hmisctable594728 td {
+ .hmisctable553944 td {
  text-align: right;
  padding: 0 1ex 0 1ex;
  }
- .hmisctable594728 th {
+ .hmisctable553944 th {
  color: Black;
  text-align: center;
  padding: 0 1ex 0 1ex;
  font-weight: bold;
  }
  </style>
- <table class="hmisctable594728">
+ <table class="hmisctable553944">
  <tr><td><font color="MidnightBlue">lowest</font> :</td><td>-66.52843</td><td>-52.52843</td><td>-50.52843</td><td>-38.52843</td><td>-37.52843</td></tr>
  <tr><td><font color="MidnightBlue">highest</font>:</td><td> 42.47157</td><td> 54.47157</td><td> 62.47157</td><td> 73.47157</td><td> 86.47157</td></tr>
  </table>
  <hr class="thinhr"> <span style="font-weight:bold">weeks</span>: Week of Follow-up (0=Baseline)<div style='float: right; text-align: right;'><img src="data:image/png;base64,
 iVBORw0KGgoAAAANSUhEUgAAABkAAAANCAMAAABrcDXcAAAACVBMVEUAAADMzMz////1iUV5AAAAIElEQVQYlWNgYGRkYAAhGIZQIMDEBMRQCsGkp8xQdBsAmoEA55cm0HQAAAAASUVORK5CYII=" alt="image" /></div> <style>
- .hmisctable275145 {
+ .hmisctable999868 {
  border: none;
  font-size: 85%;
  }
- .hmisctable275145 td {
+ .hmisctable999868 td {
  text-align: center;
  padding: 0 1ex 0 1ex;
  }
- .hmisctable275145 th {
+ .hmisctable999868 th {
  color: MidnightBlue;
  text-align: center;
  padding: 0 1ex 0 1ex;
  font-weight: normal;
  }
  </style>
- <table class="hmisctable275145">
+ <table class="hmisctable999868">
  <tr><th>n</th><th>missing</th><th>distinct</th><th>Info</th><th>Mean</th><th>Gmd</th></tr>
  <tr><td>656</td><td>0</td><td>8</td><td>0.984</td><td>6.875</td><td>5.039</td></tr>
  </table>
@@ -1008,13 +1302,13 @@ iVBORw0KGgoAAAANSUhEUgAAABkAAAANCAMAAABrcDXcAAAACVBMVEUAAADMzMz////1iUV5AAAAIElE
  </pre>
  <hr class="thinhr">
 <p>Create a wide version of the CTS data for latent growth modeling.</p>
-<div class="sourceCode" id="cb26"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb26-1"><a href="#cb26-1" aria-hidden="true" tabindex="-1"></a>cts.wide <span class="ot">&lt;-</span> <span class="fu">reshape</span>( cts.splines,</span>
-<span id="cb26-2"><a href="#cb26-2" aria-hidden="true" tabindex="-1"></a>                     <span class="at">direction =</span> <span class="st">&#39;wide&#39;</span>,</span>
-<span id="cb26-3"><a href="#cb26-3" aria-hidden="true" tabindex="-1"></a>                     <span class="at">v.names =</span> <span class="st">&#39;psstot&#39;</span>,</span>
-<span id="cb26-4"><a href="#cb26-4" aria-hidden="true" tabindex="-1"></a>                     <span class="at">timevar =</span> <span class="st">&#39;weeks&#39;</span>,</span>
-<span id="cb26-5"><a href="#cb26-5" aria-hidden="true" tabindex="-1"></a>                     <span class="at">idvar =</span> <span class="st">&#39;id&#39;</span>,</span>
-<span id="cb26-6"><a href="#cb26-6" aria-hidden="true" tabindex="-1"></a>                     <span class="at">sep =</span> <span class="st">&#39;&#39;</span></span>
-<span id="cb26-7"><a href="#cb26-7" aria-hidden="true" tabindex="-1"></a>                     )</span></code></pre></div>
+<div class="sourceCode" id="cb40"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb40-1"><a href="#cb40-1" aria-hidden="true" tabindex="-1"></a>cts.wide <span class="ot">&lt;-</span> <span class="fu">reshape</span>( cts.splines,</span>
+<span id="cb40-2"><a href="#cb40-2" aria-hidden="true" tabindex="-1"></a>                     <span class="at">direction =</span> <span class="st">&#39;wide&#39;</span>,</span>
+<span id="cb40-3"><a href="#cb40-3" aria-hidden="true" tabindex="-1"></a>                     <span class="at">v.names =</span> <span class="st">&#39;psstot&#39;</span>,</span>
+<span id="cb40-4"><a href="#cb40-4" aria-hidden="true" tabindex="-1"></a>                     <span class="at">timevar =</span> <span class="st">&#39;weeks&#39;</span>,</span>
+<span id="cb40-5"><a href="#cb40-5" aria-hidden="true" tabindex="-1"></a>                     <span class="at">idvar =</span> <span class="st">&#39;id&#39;</span>,</span>
+<span id="cb40-6"><a href="#cb40-6" aria-hidden="true" tabindex="-1"></a>                     <span class="at">sep =</span> <span class="st">&#39;&#39;</span></span>
+<span id="cb40-7"><a href="#cb40-7" aria-hidden="true" tabindex="-1"></a>                     )</span></code></pre></div>
 <p>We do not want to make the assumption that the time-invariant
 dysfunctional attitudes variable (<em>dasct</em>) affects stress
 trajectories in a linear manner; rather, we would like to at least allow
@@ -1037,11 +1331,11 @@ estimate the 3-knot restricted cubic spline effect by including both the
 <em>dasct</em> and the <em>dasct.nonlinear</em> variables as predictors
 in the model, representing the linear and nonlinear effects,
 respectively.</p>
-<div class="sourceCode" id="cb27"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb27-1"><a href="#cb27-1" aria-hidden="true" tabindex="-1"></a>das.spline <span class="ot">&lt;-</span> <span class="fu">data.frame</span>( <span class="fu">rcspline.eval</span>( cts.wide<span class="sc">$</span>dasct, <span class="at">nk =</span> <span class="dv">3</span> ) )</span>
-<span id="cb27-2"><a href="#cb27-2" aria-hidden="true" tabindex="-1"></a><span class="fu">colnames</span>( das.spline ) <span class="ot">&lt;-</span> <span class="fu">c</span>( <span class="st">&#39;dasct.nonlinear&#39;</span> )</span>
-<span id="cb27-3"><a href="#cb27-3" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb27-4"><a href="#cb27-4" aria-hidden="true" tabindex="-1"></a>cts.wide1 <span class="ot">&lt;-</span> <span class="fu">cbind</span>( cts.wide, das.spline )</span>
-<span id="cb27-5"><a href="#cb27-5" aria-hidden="true" tabindex="-1"></a><span class="fu">head</span>( cts.wide1 )</span></code></pre></div>
+<div class="sourceCode" id="cb41"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb41-1"><a href="#cb41-1" aria-hidden="true" tabindex="-1"></a>das.spline <span class="ot">&lt;-</span> <span class="fu">data.frame</span>( <span class="fu">rcspline.eval</span>( cts.wide<span class="sc">$</span>dasct, <span class="at">nk =</span> <span class="dv">3</span> ) )</span>
+<span id="cb41-2"><a href="#cb41-2" aria-hidden="true" tabindex="-1"></a><span class="fu">colnames</span>( das.spline ) <span class="ot">&lt;-</span> <span class="fu">c</span>( <span class="st">&#39;dasct.nonlinear&#39;</span> )</span>
+<span id="cb41-3"><a href="#cb41-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb41-4"><a href="#cb41-4" aria-hidden="true" tabindex="-1"></a>cts.wide1 <span class="ot">&lt;-</span> <span class="fu">cbind</span>( cts.wide, das.spline )</span>
+<span id="cb41-5"><a href="#cb41-5" aria-hidden="true" tabindex="-1"></a><span class="fu">head</span>( cts.wide1 )</span></code></pre></div>
 <pre><code>##          id    sex      dasct psstot0 psstot2 psstot4 psstot6 psstot8 psstot10
 ## 1   1074614 Female -10.528432      26      43      23      20      23       29
 ## 9   1765339   Male -50.528432       8      15      15      16       6       32
@@ -1057,25 +1351,11 @@ respectively.</p>
 ## 33       15       11      0.02551985
 ## 41       26       32      8.68790004</code></pre>
 <p>We also want to use a 3-knot restricted cubic spline to estimate a
-nonlinear stress trajectory. Unlike in standard regression models where
-time effects are captured by observed variables included in the dataset,
-time effects are captured by latent (unobserved) intercept &amp; slope
-variables (“growth factors”) in latent growth curve (LGC) models. The
-factor loadings are (typically) fixed at values selected to model a
-specific trajectory shape. To model a nonlinear trajectory using a
-restricted cubic spline, we need to have <span
-class="math inline">\(k-1\)</span> latent slope variables to capture the
-time effect; so we need 2 latent slope factors to estimate a 3-knot
-restricted cubic spline. Note, this is the same number of latent slopes
-needed to estimate a quadratic growth curve model. The question is: how
-do we constrain the factor loadings in order to estimate the appropriate
-restricted cubic spline trajectory. Again, the
-<strong>rcspline.eval()</strong> function can help us so that we don’t
-have to figure it manually.</p>
-<div class="sourceCode" id="cb29"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb29-1"><a href="#cb29-1" aria-hidden="true" tabindex="-1"></a>knots <span class="ot">&lt;-</span> <span class="fu">data.frame</span>( <span class="fu">rcspline.eval</span>( cts.splines<span class="sc">$</span>weeks, <span class="at">nk =</span> <span class="dv">3</span>, <span class="at">knots =</span> <span class="fu">c</span>( <span class="dv">4</span>, <span class="dv">8</span>, <span class="dv">14</span> ), <span class="at">inclx =</span> T ) )</span>
-<span id="cb29-2"><a href="#cb29-2" aria-hidden="true" tabindex="-1"></a>knots1 <span class="ot">&lt;-</span> knots[ <span class="sc">!</span><span class="fu">duplicated</span>( knots<span class="sc">$</span>x ), ] </span>
-<span id="cb29-3"><a href="#cb29-3" aria-hidden="true" tabindex="-1"></a><span class="fu">colnames</span>( knots1 ) <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="st">&#39;Linear Slope&#39;</span>,<span class="st">&#39;Nonlinear Slope&#39;</span> )</span>
-<span id="cb29-4"><a href="#cb29-4" aria-hidden="true" tabindex="-1"></a>knots1</span></code></pre></div>
+nonlinear stress trajectory.</p>
+<div class="sourceCode" id="cb43"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb43-1"><a href="#cb43-1" aria-hidden="true" tabindex="-1"></a>knots <span class="ot">&lt;-</span> <span class="fu">data.frame</span>( <span class="fu">rcspline.eval</span>( cts.splines<span class="sc">$</span>weeks, <span class="at">nk =</span> <span class="dv">3</span>, <span class="at">knots =</span> <span class="fu">c</span>( <span class="dv">4</span>, <span class="dv">8</span>, <span class="dv">14</span> ), <span class="at">inclx =</span> T ) )</span>
+<span id="cb43-2"><a href="#cb43-2" aria-hidden="true" tabindex="-1"></a>knots1 <span class="ot">&lt;-</span> knots[ <span class="sc">!</span><span class="fu">duplicated</span>( knots<span class="sc">$</span>x ), ] </span>
+<span id="cb43-3"><a href="#cb43-3" aria-hidden="true" tabindex="-1"></a><span class="fu">colnames</span>( knots1 ) <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="st">&#39;Linear Slope&#39;</span>,<span class="st">&#39;Nonlinear Slope&#39;</span> )</span>
+<span id="cb43-4"><a href="#cb43-4" aria-hidden="true" tabindex="-1"></a>knots1</span></code></pre></div>
 <pre><code>##   Linear Slope Nonlinear Slope
 ## 1            0        0.000000
 ## 2            2        0.000000
@@ -1085,48 +1365,162 @@ have to figure it manually.</p>
 ## 6           10        2.026667
 ## 7           12        4.053333
 ## 8           13        5.206667</code></pre>
-<div class="sourceCode" id="cb31"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb31-1"><a href="#cb31-1" aria-hidden="true" tabindex="-1"></a>stress.lgc1 <span class="ot">&lt;-</span> <span class="st">&#39;</span></span>
-<span id="cb31-2"><a href="#cb31-2" aria-hidden="true" tabindex="-1"></a><span class="st">## Define the latent growth factors -- intercept, linear slope, and nonlinear slope</span></span>
-<span id="cb31-3"><a href="#cb31-3" aria-hidden="true" tabindex="-1"></a><span class="st">i =~ 1*psstot0 + 1*psstot2 + 1*psstot4 + 1*psstot6 + 1*psstot8 + 1*psstot10 + 1*psstot12 + 1*psstot13</span></span>
-<span id="cb31-4"><a href="#cb31-4" aria-hidden="true" tabindex="-1"></a><span class="st">lin =~ 0*psstot0 + 2*psstot2 + 4*psstot4 + 6*psstot6 + 8*psstot8 + 10*psstot10 + 12*psstot12 + 13*psstot13</span></span>
-<span id="cb31-5"><a href="#cb31-5" aria-hidden="true" tabindex="-1"></a><span class="st">nonlin =~ 0*psstot0 + 0*psstot2 + 0*psstot4 + 0.08*psstot6 + 0.64*psstot8 + 2.026667*psstot10 + 4.053333*psstot12 + 5.206667*psstot13</span></span>
-<span id="cb31-6"><a href="#cb31-6" aria-hidden="true" tabindex="-1"></a><span class="st">## Estimate first-order autoregressive effect -- hold effect constant over time by giving each the same label -- phi</span></span>
-<span id="cb31-7"><a href="#cb31-7" aria-hidden="true" tabindex="-1"></a><span class="st"># psstot13 ~ phi*psstot12</span></span>
-<span id="cb31-8"><a href="#cb31-8" aria-hidden="true" tabindex="-1"></a><span class="st"># psstot12 ~ phi*psstot10</span></span>
-<span id="cb31-9"><a href="#cb31-9" aria-hidden="true" tabindex="-1"></a><span class="st"># psstot10 ~ phi*psstot8</span></span>
-<span id="cb31-10"><a href="#cb31-10" aria-hidden="true" tabindex="-1"></a><span class="st"># psstot8 ~ phi*psstot6</span></span>
-<span id="cb31-11"><a href="#cb31-11" aria-hidden="true" tabindex="-1"></a><span class="st"># psstot6 ~ phi*psstot4</span></span>
-<span id="cb31-12"><a href="#cb31-12" aria-hidden="true" tabindex="-1"></a><span class="st"># psstot4 ~ phi*psstot2</span></span>
-<span id="cb31-13"><a href="#cb31-13" aria-hidden="true" tabindex="-1"></a><span class="st"># psstot2 ~ phi*psstot0</span></span>
-<span id="cb31-14"><a href="#cb31-14" aria-hidden="true" tabindex="-1"></a><span class="st">## Constrain variances of latent growth models to = 0 -- i.e., no random effects</span></span>
-<span id="cb31-15"><a href="#cb31-15" aria-hidden="true" tabindex="-1"></a><span class="st">i ~~ i</span></span>
-<span id="cb31-16"><a href="#cb31-16" aria-hidden="true" tabindex="-1"></a><span class="st">lin ~~ lin</span></span>
-<span id="cb31-17"><a href="#cb31-17" aria-hidden="true" tabindex="-1"></a><span class="st">nonlin ~~ nonlin</span></span>
-<span id="cb31-18"><a href="#cb31-18" aria-hidden="true" tabindex="-1"></a><span class="st">i ~~ lin</span></span>
-<span id="cb31-19"><a href="#cb31-19" aria-hidden="true" tabindex="-1"></a><span class="st">i ~~ nonlin</span></span>
-<span id="cb31-20"><a href="#cb31-20" aria-hidden="true" tabindex="-1"></a><span class="st">lin ~~ nonlin</span></span>
-<span id="cb31-21"><a href="#cb31-21" aria-hidden="true" tabindex="-1"></a><span class="st">## Constrain error variances to be constant over time</span></span>
-<span id="cb31-22"><a href="#cb31-22" aria-hidden="true" tabindex="-1"></a><span class="st">psstot0 ~~ e*psstot0</span></span>
-<span id="cb31-23"><a href="#cb31-23" aria-hidden="true" tabindex="-1"></a><span class="st">psstot2 ~~ e*psstot2</span></span>
-<span id="cb31-24"><a href="#cb31-24" aria-hidden="true" tabindex="-1"></a><span class="st">psstot4 ~~ e*psstot4</span></span>
-<span id="cb31-25"><a href="#cb31-25" aria-hidden="true" tabindex="-1"></a><span class="st">psstot6 ~~ e*psstot6</span></span>
-<span id="cb31-26"><a href="#cb31-26" aria-hidden="true" tabindex="-1"></a><span class="st">psstot8 ~~ e*psstot8</span></span>
-<span id="cb31-27"><a href="#cb31-27" aria-hidden="true" tabindex="-1"></a><span class="st">psstot10 ~~ e*psstot10</span></span>
-<span id="cb31-28"><a href="#cb31-28" aria-hidden="true" tabindex="-1"></a><span class="st">psstot12 ~~ e*psstot12</span></span>
-<span id="cb31-29"><a href="#cb31-29" aria-hidden="true" tabindex="-1"></a><span class="st">psstot13 ~~ e*psstot13</span></span>
-<span id="cb31-30"><a href="#cb31-30" aria-hidden="true" tabindex="-1"></a><span class="st">## Estimate effects of DAS on stress trajectories</span></span>
-<span id="cb31-31"><a href="#cb31-31" aria-hidden="true" tabindex="-1"></a><span class="st">i  ~ dasct + dasct.nonlinear</span></span>
-<span id="cb31-32"><a href="#cb31-32" aria-hidden="true" tabindex="-1"></a><span class="st">&#39;</span> </span>
-<span id="cb31-33"><a href="#cb31-33" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb31-34"><a href="#cb31-34" aria-hidden="true" tabindex="-1"></a>stress.lgc1.fit <span class="ot">&lt;-</span> <span class="fu">growth</span>( stress.lgc1,</span>
-<span id="cb31-35"><a href="#cb31-35" aria-hidden="true" tabindex="-1"></a>                          <span class="at">data =</span> cts.wide1,</span>
-<span id="cb31-36"><a href="#cb31-36" aria-hidden="true" tabindex="-1"></a>                          <span class="at">estimator =</span> <span class="st">&#39;ml&#39;</span> )</span>
-<span id="cb31-37"><a href="#cb31-37" aria-hidden="true" tabindex="-1"></a><span class="fu">summary</span>( stress.lgc1.fit, <span class="at">fit.measures =</span> T )</span></code></pre></div>
-<pre><code>## lavaan 0.6-11 ended normally after 93 iterations
+<p>The RCS growth curve model fits the data well. But we may be able to
+simplify the model by allowing the perceived stress growth trajectory to
+be linear.</p>
+<div class="sourceCode" id="cb45"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb45-1"><a href="#cb45-1" aria-hidden="true" tabindex="-1"></a>stress.lgc1 <span class="ot">&lt;-</span> <span class="st">&#39;</span></span>
+<span id="cb45-2"><a href="#cb45-2" aria-hidden="true" tabindex="-1"></a><span class="st">## Define the latent growth factors -- intercept, linear slope, and nonlinear slope</span></span>
+<span id="cb45-3"><a href="#cb45-3" aria-hidden="true" tabindex="-1"></a><span class="st">i =~ 1*psstot0 + 1*psstot2 + 1*psstot4 + 1*psstot6 + 1*psstot8 + 1*psstot10 + 1*psstot12 + 1*psstot13</span></span>
+<span id="cb45-4"><a href="#cb45-4" aria-hidden="true" tabindex="-1"></a><span class="st">lin =~ 0*psstot0 + 2*psstot2 + 4*psstot4 + 6*psstot6 + 8*psstot8 + 10*psstot10 + 12*psstot12 + 13*psstot13</span></span>
+<span id="cb45-5"><a href="#cb45-5" aria-hidden="true" tabindex="-1"></a><span class="st">nonlin =~ 0*psstot0 + 0*psstot2 + 0*psstot4 + 0.08*psstot6 + 0.64*psstot8 + 2.026667*psstot10 + 4.053333*psstot12 + 5.206667*psstot13</span></span>
+<span id="cb45-6"><a href="#cb45-6" aria-hidden="true" tabindex="-1"></a><span class="st">## Estimate first-order autoregressive effect -- hold effect constant over time by giving each the same label -- phi</span></span>
+<span id="cb45-7"><a href="#cb45-7" aria-hidden="true" tabindex="-1"></a><span class="st">## Constrain variances of latent growth models to = 0 -- i.e., no random effects</span></span>
+<span id="cb45-8"><a href="#cb45-8" aria-hidden="true" tabindex="-1"></a><span class="st">i ~~ i</span></span>
+<span id="cb45-9"><a href="#cb45-9" aria-hidden="true" tabindex="-1"></a><span class="st">lin ~~ lin</span></span>
+<span id="cb45-10"><a href="#cb45-10" aria-hidden="true" tabindex="-1"></a><span class="st">nonlin ~~ nonlin</span></span>
+<span id="cb45-11"><a href="#cb45-11" aria-hidden="true" tabindex="-1"></a><span class="st">i ~~ lin</span></span>
+<span id="cb45-12"><a href="#cb45-12" aria-hidden="true" tabindex="-1"></a><span class="st">i ~~ nonlin</span></span>
+<span id="cb45-13"><a href="#cb45-13" aria-hidden="true" tabindex="-1"></a><span class="st">lin ~~ nonlin</span></span>
+<span id="cb45-14"><a href="#cb45-14" aria-hidden="true" tabindex="-1"></a><span class="st">## Constrain error variances to be constant over time</span></span>
+<span id="cb45-15"><a href="#cb45-15" aria-hidden="true" tabindex="-1"></a><span class="st">psstot0 ~~ e*psstot0</span></span>
+<span id="cb45-16"><a href="#cb45-16" aria-hidden="true" tabindex="-1"></a><span class="st">psstot2 ~~ e*psstot2</span></span>
+<span id="cb45-17"><a href="#cb45-17" aria-hidden="true" tabindex="-1"></a><span class="st">psstot4 ~~ e*psstot4</span></span>
+<span id="cb45-18"><a href="#cb45-18" aria-hidden="true" tabindex="-1"></a><span class="st">psstot6 ~~ e*psstot6</span></span>
+<span id="cb45-19"><a href="#cb45-19" aria-hidden="true" tabindex="-1"></a><span class="st">psstot8 ~~ e*psstot8</span></span>
+<span id="cb45-20"><a href="#cb45-20" aria-hidden="true" tabindex="-1"></a><span class="st">psstot10 ~~ e*psstot10</span></span>
+<span id="cb45-21"><a href="#cb45-21" aria-hidden="true" tabindex="-1"></a><span class="st">psstot12 ~~ e*psstot12</span></span>
+<span id="cb45-22"><a href="#cb45-22" aria-hidden="true" tabindex="-1"></a><span class="st">psstot13 ~~ e*psstot13</span></span>
+<span id="cb45-23"><a href="#cb45-23" aria-hidden="true" tabindex="-1"></a><span class="st">## Estimate effects of DAS on stress trajectories</span></span>
+<span id="cb45-24"><a href="#cb45-24" aria-hidden="true" tabindex="-1"></a><span class="st">i  ~ dasct + dasct.nonlinear</span></span>
+<span id="cb45-25"><a href="#cb45-25" aria-hidden="true" tabindex="-1"></a><span class="st">&#39;</span> </span>
+<span id="cb45-26"><a href="#cb45-26" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb45-27"><a href="#cb45-27" aria-hidden="true" tabindex="-1"></a>stress.lgc1.fit <span class="ot">&lt;-</span> <span class="fu">growth</span>( stress.lgc1,</span>
+<span id="cb45-28"><a href="#cb45-28" aria-hidden="true" tabindex="-1"></a>                          <span class="at">data =</span> cts.wide1,</span>
+<span id="cb45-29"><a href="#cb45-29" aria-hidden="true" tabindex="-1"></a>                          <span class="at">estimator =</span> <span class="st">&#39;ml&#39;</span> )</span>
+<span id="cb45-30"><a href="#cb45-30" aria-hidden="true" tabindex="-1"></a>fitmeas <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="st">&quot;npar&quot;</span>,<span class="st">&quot;chisq&quot;</span>, <span class="st">&quot;df&quot;</span>, <span class="st">&quot;pvalue&quot;</span>, <span class="st">&quot;tfi&quot;</span>, <span class="st">&quot;rmsea&quot;</span>,<span class="st">&quot;rmsea.ci.lower&quot;</span>,<span class="st">&quot;rmsea.ci.upper&quot;</span>,<span class="st">&quot;srmr&quot;</span>)</span>
+<span id="cb45-31"><a href="#cb45-31" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb45-32"><a href="#cb45-32" aria-hidden="true" tabindex="-1"></a><span class="fu">fitMeasures</span>( stress.lgc1.fit, <span class="at">fit.measures =</span> fitmeas )</span></code></pre></div>
+<pre><code>##           npar          chisq             df         pvalue          rmsea 
+##         12.000         49.925         48.000          0.397          0.025 
+## rmsea.ci.lower rmsea.ci.upper           srmr 
+##          0.000          0.087          0.092</code></pre>
+<p>Fit a linear growth trajectory by eliminating the nonlinear latent
+slope parameter. This results in a gain of 4 <span
+class="math inline">\(df\)</span>.</p>
+<div class="sourceCode" id="cb47"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb47-1"><a href="#cb47-1" aria-hidden="true" tabindex="-1"></a>stress.lgc2 <span class="ot">&lt;-</span> <span class="st">&#39;</span></span>
+<span id="cb47-2"><a href="#cb47-2" aria-hidden="true" tabindex="-1"></a><span class="st">## Define the latent growth factors -- intercept, linear slope, and nonlinear slope</span></span>
+<span id="cb47-3"><a href="#cb47-3" aria-hidden="true" tabindex="-1"></a><span class="st">i =~ 1*psstot0 + 1*psstot2 + 1*psstot4 + 1*psstot6 + 1*psstot8 + 1*psstot10 + 1*psstot12 + 1*psstot13</span></span>
+<span id="cb47-4"><a href="#cb47-4" aria-hidden="true" tabindex="-1"></a><span class="st">lin =~ 0*psstot0 + 2*psstot2 + 4*psstot4 + 6*psstot6 + 8*psstot8 + 10*psstot10 + 12*psstot12 + 13*psstot13</span></span>
+<span id="cb47-5"><a href="#cb47-5" aria-hidden="true" tabindex="-1"></a><span class="st">## Estimate first-order autoregressive effect -- hold effect constant over time by giving each the same label -- phi</span></span>
+<span id="cb47-6"><a href="#cb47-6" aria-hidden="true" tabindex="-1"></a><span class="st"># psstot13 ~ phi*psstot12</span></span>
+<span id="cb47-7"><a href="#cb47-7" aria-hidden="true" tabindex="-1"></a><span class="st"># psstot12 ~ phi*psstot10</span></span>
+<span id="cb47-8"><a href="#cb47-8" aria-hidden="true" tabindex="-1"></a><span class="st"># psstot10 ~ phi*psstot8</span></span>
+<span id="cb47-9"><a href="#cb47-9" aria-hidden="true" tabindex="-1"></a><span class="st"># psstot8 ~ phi*psstot6</span></span>
+<span id="cb47-10"><a href="#cb47-10" aria-hidden="true" tabindex="-1"></a><span class="st"># psstot6 ~ phi*psstot4</span></span>
+<span id="cb47-11"><a href="#cb47-11" aria-hidden="true" tabindex="-1"></a><span class="st"># psstot4 ~ phi*psstot2</span></span>
+<span id="cb47-12"><a href="#cb47-12" aria-hidden="true" tabindex="-1"></a><span class="st"># psstot2 ~ phi*psstot0</span></span>
+<span id="cb47-13"><a href="#cb47-13" aria-hidden="true" tabindex="-1"></a><span class="st">## Constrain variances of latent growth models to = 0 -- i.e., no random effects</span></span>
+<span id="cb47-14"><a href="#cb47-14" aria-hidden="true" tabindex="-1"></a><span class="st">i ~~ i</span></span>
+<span id="cb47-15"><a href="#cb47-15" aria-hidden="true" tabindex="-1"></a><span class="st">lin ~~ lin</span></span>
+<span id="cb47-16"><a href="#cb47-16" aria-hidden="true" tabindex="-1"></a><span class="st">i ~~ lin</span></span>
+<span id="cb47-17"><a href="#cb47-17" aria-hidden="true" tabindex="-1"></a><span class="st">## Constrain error variances to be constant over time</span></span>
+<span id="cb47-18"><a href="#cb47-18" aria-hidden="true" tabindex="-1"></a><span class="st">psstot0 ~~ e*psstot0</span></span>
+<span id="cb47-19"><a href="#cb47-19" aria-hidden="true" tabindex="-1"></a><span class="st">psstot2 ~~ e*psstot2</span></span>
+<span id="cb47-20"><a href="#cb47-20" aria-hidden="true" tabindex="-1"></a><span class="st">psstot4 ~~ e*psstot4</span></span>
+<span id="cb47-21"><a href="#cb47-21" aria-hidden="true" tabindex="-1"></a><span class="st">psstot6 ~~ e*psstot6</span></span>
+<span id="cb47-22"><a href="#cb47-22" aria-hidden="true" tabindex="-1"></a><span class="st">psstot8 ~~ e*psstot8</span></span>
+<span id="cb47-23"><a href="#cb47-23" aria-hidden="true" tabindex="-1"></a><span class="st">psstot10 ~~ e*psstot10</span></span>
+<span id="cb47-24"><a href="#cb47-24" aria-hidden="true" tabindex="-1"></a><span class="st">psstot12 ~~ e*psstot12</span></span>
+<span id="cb47-25"><a href="#cb47-25" aria-hidden="true" tabindex="-1"></a><span class="st">psstot13 ~~ e*psstot13</span></span>
+<span id="cb47-26"><a href="#cb47-26" aria-hidden="true" tabindex="-1"></a><span class="st">## Estimate effects of DAS on stress trajectories</span></span>
+<span id="cb47-27"><a href="#cb47-27" aria-hidden="true" tabindex="-1"></a><span class="st">i  ~ dasct + dasct.nonlinear</span></span>
+<span id="cb47-28"><a href="#cb47-28" aria-hidden="true" tabindex="-1"></a><span class="st">&#39;</span> </span>
+<span id="cb47-29"><a href="#cb47-29" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb47-30"><a href="#cb47-30" aria-hidden="true" tabindex="-1"></a>stress.lgc2.fit <span class="ot">&lt;-</span> <span class="fu">growth</span>( stress.lgc2,</span>
+<span id="cb47-31"><a href="#cb47-31" aria-hidden="true" tabindex="-1"></a>                          <span class="at">data =</span> cts.wide1,</span>
+<span id="cb47-32"><a href="#cb47-32" aria-hidden="true" tabindex="-1"></a>                          <span class="at">estimator =</span> <span class="st">&#39;ml&#39;</span> )</span>
+<span id="cb47-33"><a href="#cb47-33" aria-hidden="true" tabindex="-1"></a><span class="fu">fitMeasures</span>( stress.lgc2.fit, <span class="at">fit.measures =</span> fitmeas )</span></code></pre></div>
+<pre><code>##           npar          chisq             df         pvalue          rmsea 
+##          8.000         77.809         52.000          0.012          0.089 
+## rmsea.ci.lower rmsea.ci.upper           srmr 
+##          0.043          0.128          0.117</code></pre>
+<p>Conduct a likelihood ratio test (<span
+class="math inline">\(df=4\)</span>) comparing the nonlinear RCS growth
+model and the simpler linear growth model. The <span
+class="math inline">\(\chi^2\)</span> value is highly significant and
+the AIC value is smaller for the nonlinear RCS growth model. Therefore,
+we will retain the nonlinear growth parameter.</p>
+<div class="sourceCode" id="cb49"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb49-1"><a href="#cb49-1" aria-hidden="true" tabindex="-1"></a><span class="fu">anova</span>( stress.lgc1.fit, stress.lgc2.fit )</span></code></pre></div>
+<pre><code>## Chi-Squared Difference Test
+## 
+##                 Df    AIC    BIC  Chisq Chisq diff Df diff Pr(&gt;Chisq)    
+## stress.lgc1.fit 48 3182.3 3208.0 49.925                                  
+## stress.lgc2.fit 52 3202.2 3219.3 77.809     27.884       4  1.317e-05 ***
+## ---
+## Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1</code></pre>
+<p>Next, we can test whether we can simplify the model by simplifying
+the effect of dysfunctional attitudes on perceived stress trajectories
+by constraining the effect to be linear (i.e., getting rid of the
+nonlinear RCS effect).</p>
+<div class="sourceCode" id="cb51"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb51-1"><a href="#cb51-1" aria-hidden="true" tabindex="-1"></a>stress.lgc3 <span class="ot">&lt;-</span> <span class="st">&#39;</span></span>
+<span id="cb51-2"><a href="#cb51-2" aria-hidden="true" tabindex="-1"></a><span class="st">## Define the latent growth factors -- intercept, linear slope, and nonlinear slope</span></span>
+<span id="cb51-3"><a href="#cb51-3" aria-hidden="true" tabindex="-1"></a><span class="st">i =~ 1*psstot0 + 1*psstot2 + 1*psstot4 + 1*psstot6 + 1*psstot8 + 1*psstot10 + 1*psstot12 + 1*psstot13</span></span>
+<span id="cb51-4"><a href="#cb51-4" aria-hidden="true" tabindex="-1"></a><span class="st">lin =~ 0*psstot0 + 2*psstot2 + 4*psstot4 + 6*psstot6 + 8*psstot8 + 10*psstot10 + 12*psstot12 + 13*psstot13</span></span>
+<span id="cb51-5"><a href="#cb51-5" aria-hidden="true" tabindex="-1"></a><span class="st">nonlin =~ 0*psstot0 + 0*psstot2 + 0*psstot4 + 0.08*psstot6 + 0.64*psstot8 + 2.026667*psstot10 + 4.053333*psstot12 + 5.206667*psstot13</span></span>
+<span id="cb51-6"><a href="#cb51-6" aria-hidden="true" tabindex="-1"></a><span class="st">## Estimate first-order autoregressive effect -- hold effect constant over time by giving each the same label -- phi</span></span>
+<span id="cb51-7"><a href="#cb51-7" aria-hidden="true" tabindex="-1"></a><span class="st">## Constrain variances of latent growth models to = 0 -- i.e., no random effects</span></span>
+<span id="cb51-8"><a href="#cb51-8" aria-hidden="true" tabindex="-1"></a><span class="st">i ~~ i</span></span>
+<span id="cb51-9"><a href="#cb51-9" aria-hidden="true" tabindex="-1"></a><span class="st">lin ~~ lin</span></span>
+<span id="cb51-10"><a href="#cb51-10" aria-hidden="true" tabindex="-1"></a><span class="st">nonlin ~~ nonlin</span></span>
+<span id="cb51-11"><a href="#cb51-11" aria-hidden="true" tabindex="-1"></a><span class="st">i ~~ lin</span></span>
+<span id="cb51-12"><a href="#cb51-12" aria-hidden="true" tabindex="-1"></a><span class="st">i ~~ nonlin</span></span>
+<span id="cb51-13"><a href="#cb51-13" aria-hidden="true" tabindex="-1"></a><span class="st">lin ~~ nonlin</span></span>
+<span id="cb51-14"><a href="#cb51-14" aria-hidden="true" tabindex="-1"></a><span class="st">## Constrain error variances to be constant over time</span></span>
+<span id="cb51-15"><a href="#cb51-15" aria-hidden="true" tabindex="-1"></a><span class="st">psstot0 ~~ e*psstot0</span></span>
+<span id="cb51-16"><a href="#cb51-16" aria-hidden="true" tabindex="-1"></a><span class="st">psstot2 ~~ e*psstot2</span></span>
+<span id="cb51-17"><a href="#cb51-17" aria-hidden="true" tabindex="-1"></a><span class="st">psstot4 ~~ e*psstot4</span></span>
+<span id="cb51-18"><a href="#cb51-18" aria-hidden="true" tabindex="-1"></a><span class="st">psstot6 ~~ e*psstot6</span></span>
+<span id="cb51-19"><a href="#cb51-19" aria-hidden="true" tabindex="-1"></a><span class="st">psstot8 ~~ e*psstot8</span></span>
+<span id="cb51-20"><a href="#cb51-20" aria-hidden="true" tabindex="-1"></a><span class="st">psstot10 ~~ e*psstot10</span></span>
+<span id="cb51-21"><a href="#cb51-21" aria-hidden="true" tabindex="-1"></a><span class="st">psstot12 ~~ e*psstot12</span></span>
+<span id="cb51-22"><a href="#cb51-22" aria-hidden="true" tabindex="-1"></a><span class="st">psstot13 ~~ e*psstot13</span></span>
+<span id="cb51-23"><a href="#cb51-23" aria-hidden="true" tabindex="-1"></a><span class="st">## Estimate effects of DAS on stress trajectories</span></span>
+<span id="cb51-24"><a href="#cb51-24" aria-hidden="true" tabindex="-1"></a><span class="st">i  ~ dasct + 0*dasct.nonlinear</span></span>
+<span id="cb51-25"><a href="#cb51-25" aria-hidden="true" tabindex="-1"></a><span class="st">&#39;</span> </span>
+<span id="cb51-26"><a href="#cb51-26" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb51-27"><a href="#cb51-27" aria-hidden="true" tabindex="-1"></a>stress.lgc3.fit <span class="ot">&lt;-</span> <span class="fu">growth</span>( stress.lgc3,</span>
+<span id="cb51-28"><a href="#cb51-28" aria-hidden="true" tabindex="-1"></a>                          <span class="at">data =</span> cts.wide1,</span>
+<span id="cb51-29"><a href="#cb51-29" aria-hidden="true" tabindex="-1"></a>                          <span class="at">estimator =</span> <span class="st">&#39;ml&#39;</span> )</span>
+<span id="cb51-30"><a href="#cb51-30" aria-hidden="true" tabindex="-1"></a><span class="fu">fitMeasures</span>( stress.lgc3.fit, <span class="at">fit.measures =</span> fitmeas )</span></code></pre></div>
+<pre><code>##           npar          chisq             df         pvalue          rmsea 
+##         11.000         50.558         49.000          0.412          0.022 
+## rmsea.ci.lower rmsea.ci.upper           srmr 
+##          0.000          0.086          0.094</code></pre>
+<p>We can now conduct a <span class="math inline">\(df=1\)</span>
+likelihood ratio test to determine whether we need to retain the
+nonlinear effect of dysfunctional attitudes. The test is not significant
+and the AIC favors the simpler model. So we will eliminate the nonlinear
+effect of dysfunctional attitudes.</p>
+<div class="sourceCode" id="cb53"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb53-1"><a href="#cb53-1" aria-hidden="true" tabindex="-1"></a><span class="fu">anova</span>( stress.lgc1.fit, stress.lgc3.fit )</span></code></pre></div>
+<pre><code>## Chi-Squared Difference Test
+## 
+##                 Df    AIC    BIC  Chisq Chisq diff Df diff Pr(&gt;Chisq)
+## stress.lgc1.fit 48 3182.3 3208.0 49.925                              
+## stress.lgc3.fit 49 3180.9 3204.5 50.558    0.63221       1     0.4265</code></pre>
+<p>Now let’s look at the results of the final model with a nonlinear
+trajectory and linear effect of dysfunctional attitudes. We see that the
+linear effect of dysfunctional attitudes is positive and significant,
+indicating that students with higher dysfunctional attitudes begin the
+semester with higher levels of perceived stress. (Note, we did not
+consider in any of the models the possibility that dysfunctional
+attitudes affects the shape of students’ stress trajecotries – i.e.,
+exposure by time interaction).</p>
+<div class="sourceCode" id="cb55"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb55-1"><a href="#cb55-1" aria-hidden="true" tabindex="-1"></a><span class="fu">summary</span>( stress.lgc3.fit )</span></code></pre></div>
+<pre><code>## lavaan 0.6-11 ended normally after 103 iterations
 ## 
 ##   Estimator                                         ML
 ##   Optimization method                           NLMINB
-##   Number of model parameters                        19
+##   Number of model parameters                        18
 ##   Number of equality constraints                     7
 ##                                                       
 ##                                                   Used       Total
@@ -1134,40 +1528,9 @@ have to figure it manually.</p>
 ##                                                                   
 ## Model Test User Model:
 ##                                                       
-##   Test statistic                                49.925
-##   Degrees of freedom                                48
-##   P-value (Chi-square)                           0.397
-## 
-## Model Test Baseline Model:
-## 
-##   Test statistic                               342.288
-##   Degrees of freedom                                44
-##   P-value                                        0.000
-## 
-## User Model versus Baseline Model:
-## 
-##   Comparative Fit Index (CFI)                    0.994
-##   Tucker-Lewis Index (TLI)                       0.994
-## 
-## Loglikelihood and Information Criteria:
-## 
-##   Loglikelihood user model (H0)              -1579.151
-##   Loglikelihood unrestricted model (H1)      -1554.188
-##                                                       
-##   Akaike (AIC)                                3182.301
-##   Bayesian (BIC)                              3208.019
-##   Sample-size adjusted Bayesian (BIC)         3170.257
-## 
-## Root Mean Square Error of Approximation:
-## 
-##   RMSEA                                          0.025
-##   90 Percent confidence interval - lower         0.000
-##   90 Percent confidence interval - upper         0.087
-##   P-value RMSEA &lt;= 0.05                          0.674
-## 
-## Standardized Root Mean Square Residual:
-## 
-##   SRMR                                           0.092
+##   Test statistic                                50.558
+##   Degrees of freedom                                49
+##   P-value (Chi-square)                           0.412
 ## 
 ## Parameter Estimates:
 ## 
@@ -1208,14 +1571,14 @@ have to figure it manually.</p>
 ## Regressions:
 ##                    Estimate  Std.Err  z-value  P(&gt;|z|)
 ##   i ~                                                 
-##     dasct             0.127    0.060    2.137    0.033
-##     dasct.nonliner   -0.070    0.087   -0.803    0.422
+##     dasct             0.084    0.023    3.559    0.000
+##     dasct.nonliner    0.000                           
 ## 
 ## Covariances:
 ##                    Estimate  Std.Err  z-value  P(&gt;|z|)
 ##  .i ~~                                                
-##     lin              -0.703    0.884   -0.795    0.426
-##     nonlin           -0.964    1.809   -0.533    0.594
+##     lin              -0.713    0.885   -0.806    0.420
+##     nonlin           -0.864    1.812   -0.477    0.633
 ##   lin ~~                                              
 ##     nonlin           -1.057    0.410   -2.575    0.010
 ## 
@@ -1229,13 +1592,13 @@ have to figure it manually.</p>
 ##    .psstot10          0.000                           
 ##    .psstot12          0.000                           
 ##    .psstot13          0.000                           
-##    .i                22.682    1.316   17.232    0.000
+##    .i                21.820    0.764   28.563    0.000
 ##     lin               0.118    0.133    0.884    0.377
 ##     nonlin           -0.418    0.294   -1.424    0.155
 ## 
 ## Variances:
 ##                    Estimate  Std.Err  z-value  P(&gt;|z|)
-##    .i                25.467    6.583    3.868    0.000
+##    .i                25.503    6.590    3.870    0.000
 ##     lin               0.619    0.203    3.055    0.002
 ##     nonlin            2.876    0.989    2.907    0.004
 ##    .psstot0    (e)   18.082    1.441   12.550    0.000
@@ -1246,231 +1609,16 @@ have to figure it manually.</p>
 ##    .psstot10   (e)   18.082    1.441   12.550    0.000
 ##    .psstot12   (e)   18.082    1.441   12.550    0.000
 ##    .psstot13   (e)   18.082    1.441   12.550    0.000</code></pre>
-<div class="sourceCode" id="cb33"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb33-1"><a href="#cb33-1" aria-hidden="true" tabindex="-1"></a>stress.lgc2 <span class="ot">&lt;-</span> <span class="st">&#39;</span></span>
-<span id="cb33-2"><a href="#cb33-2" aria-hidden="true" tabindex="-1"></a><span class="st">## Define the latent growth factors -- intercept, linear slope, and nonlinear slope</span></span>
-<span id="cb33-3"><a href="#cb33-3" aria-hidden="true" tabindex="-1"></a><span class="st">i =~ 1*psstot0 + 1*psstot2 + 1*psstot4 + 1*psstot6 + 1*psstot8 + 1*psstot10 + 1*psstot12 + 1*psstot13</span></span>
-<span id="cb33-4"><a href="#cb33-4" aria-hidden="true" tabindex="-1"></a><span class="st">lin =~ 0*psstot0 + 2*psstot2 + 4*psstot4 + 6*psstot6 + 8*psstot8 + 10*psstot10 + 12*psstot12 + 13*psstot13</span></span>
-<span id="cb33-5"><a href="#cb33-5" aria-hidden="true" tabindex="-1"></a><span class="st">## Estimate first-order autoregressive effect -- hold effect constant over time by giving each the same label -- phi</span></span>
-<span id="cb33-6"><a href="#cb33-6" aria-hidden="true" tabindex="-1"></a><span class="st"># psstot13 ~ phi*psstot12</span></span>
-<span id="cb33-7"><a href="#cb33-7" aria-hidden="true" tabindex="-1"></a><span class="st"># psstot12 ~ phi*psstot10</span></span>
-<span id="cb33-8"><a href="#cb33-8" aria-hidden="true" tabindex="-1"></a><span class="st"># psstot10 ~ phi*psstot8</span></span>
-<span id="cb33-9"><a href="#cb33-9" aria-hidden="true" tabindex="-1"></a><span class="st"># psstot8 ~ phi*psstot6</span></span>
-<span id="cb33-10"><a href="#cb33-10" aria-hidden="true" tabindex="-1"></a><span class="st"># psstot6 ~ phi*psstot4</span></span>
-<span id="cb33-11"><a href="#cb33-11" aria-hidden="true" tabindex="-1"></a><span class="st"># psstot4 ~ phi*psstot2</span></span>
-<span id="cb33-12"><a href="#cb33-12" aria-hidden="true" tabindex="-1"></a><span class="st"># psstot2 ~ phi*psstot0</span></span>
-<span id="cb33-13"><a href="#cb33-13" aria-hidden="true" tabindex="-1"></a><span class="st">## Constrain variances of latent growth models to = 0 -- i.e., no random effects</span></span>
-<span id="cb33-14"><a href="#cb33-14" aria-hidden="true" tabindex="-1"></a><span class="st">i ~~ i</span></span>
-<span id="cb33-15"><a href="#cb33-15" aria-hidden="true" tabindex="-1"></a><span class="st">lin ~~ lin</span></span>
-<span id="cb33-16"><a href="#cb33-16" aria-hidden="true" tabindex="-1"></a><span class="st">i ~~ lin</span></span>
-<span id="cb33-17"><a href="#cb33-17" aria-hidden="true" tabindex="-1"></a><span class="st">## Constrain error variances to be constant over time</span></span>
-<span id="cb33-18"><a href="#cb33-18" aria-hidden="true" tabindex="-1"></a><span class="st">psstot0 ~~ e*psstot0</span></span>
-<span id="cb33-19"><a href="#cb33-19" aria-hidden="true" tabindex="-1"></a><span class="st">psstot2 ~~ e*psstot2</span></span>
-<span id="cb33-20"><a href="#cb33-20" aria-hidden="true" tabindex="-1"></a><span class="st">psstot4 ~~ e*psstot4</span></span>
-<span id="cb33-21"><a href="#cb33-21" aria-hidden="true" tabindex="-1"></a><span class="st">psstot6 ~~ e*psstot6</span></span>
-<span id="cb33-22"><a href="#cb33-22" aria-hidden="true" tabindex="-1"></a><span class="st">psstot8 ~~ e*psstot8</span></span>
-<span id="cb33-23"><a href="#cb33-23" aria-hidden="true" tabindex="-1"></a><span class="st">psstot10 ~~ e*psstot10</span></span>
-<span id="cb33-24"><a href="#cb33-24" aria-hidden="true" tabindex="-1"></a><span class="st">psstot12 ~~ e*psstot12</span></span>
-<span id="cb33-25"><a href="#cb33-25" aria-hidden="true" tabindex="-1"></a><span class="st">psstot13 ~~ e*psstot13</span></span>
-<span id="cb33-26"><a href="#cb33-26" aria-hidden="true" tabindex="-1"></a><span class="st">## Estimate effects of DAS on stress trajectories</span></span>
-<span id="cb33-27"><a href="#cb33-27" aria-hidden="true" tabindex="-1"></a><span class="st">i  ~ dasct + dasct.nonlinear</span></span>
-<span id="cb33-28"><a href="#cb33-28" aria-hidden="true" tabindex="-1"></a><span class="st">&#39;</span> </span>
-<span id="cb33-29"><a href="#cb33-29" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb33-30"><a href="#cb33-30" aria-hidden="true" tabindex="-1"></a>stress.lgc2.fit <span class="ot">&lt;-</span> <span class="fu">growth</span>( stress.lgc2,</span>
-<span id="cb33-31"><a href="#cb33-31" aria-hidden="true" tabindex="-1"></a>                          <span class="at">data =</span> cts.wide1,</span>
-<span id="cb33-32"><a href="#cb33-32" aria-hidden="true" tabindex="-1"></a>                          <span class="at">estimator =</span> <span class="st">&#39;ml&#39;</span> )</span>
-<span id="cb33-33"><a href="#cb33-33" aria-hidden="true" tabindex="-1"></a><span class="fu">summary</span>( stress.lgc2.fit, <span class="at">fit.measures =</span> T )</span></code></pre></div>
-<pre><code>## lavaan 0.6-11 ended normally after 79 iterations
-## 
-##   Estimator                                         ML
-##   Optimization method                           NLMINB
-##   Number of model parameters                        15
-##   Number of equality constraints                     7
-##                                                       
-##                                                   Used       Total
-##   Number of observations                            63          82
-##                                                                   
-## Model Test User Model:
-##                                                       
-##   Test statistic                                77.809
-##   Degrees of freedom                                52
-##   P-value (Chi-square)                           0.012
-## 
-## Model Test Baseline Model:
-## 
-##   Test statistic                               342.288
-##   Degrees of freedom                                44
-##   P-value                                        0.000
-## 
-## User Model versus Baseline Model:
-## 
-##   Comparative Fit Index (CFI)                    0.913
-##   Tucker-Lewis Index (TLI)                       0.927
-## 
-## Loglikelihood and Information Criteria:
-## 
-##   Loglikelihood user model (H0)              -1593.092
-##   Loglikelihood unrestricted model (H1)      -1554.188
-##                                                       
-##   Akaike (AIC)                                3202.185
-##   Bayesian (BIC)                              3219.330
-##   Sample-size adjusted Bayesian (BIC)         3194.156
-## 
-## Root Mean Square Error of Approximation:
-## 
-##   RMSEA                                          0.089
-##   90 Percent confidence interval - lower         0.043
-##   90 Percent confidence interval - upper         0.128
-##   P-value RMSEA &lt;= 0.05                          0.074
-## 
-## Standardized Root Mean Square Residual:
-## 
-##   SRMR                                           0.117
-## 
-## Parameter Estimates:
-## 
-##   Standard errors                             Standard
-##   Information                                 Expected
-##   Information saturated (h1) model          Structured
-## 
-## Latent Variables:
-##                    Estimate  Std.Err  z-value  P(&gt;|z|)
-##   i =~                                                
-##     psstot0           1.000                           
-##     psstot2           1.000                           
-##     psstot4           1.000                           
-##     psstot6           1.000                           
-##     psstot8           1.000                           
-##     psstot10          1.000                           
-##     psstot12          1.000                           
-##     psstot13          1.000                           
-##   lin =~                                              
-##     psstot0           0.000                           
-##     psstot2           2.000                           
-##     psstot4           4.000                           
-##     psstot6           6.000                           
-##     psstot8           8.000                           
-##     psstot10         10.000                           
-##     psstot12         12.000                           
-##     psstot13         13.000                           
-## 
-## Regressions:
-##                    Estimate  Std.Err  z-value  P(&gt;|z|)
-##   i ~                                                 
-##     dasct             0.110    0.063    1.754    0.079
-##     dasct.nonliner   -0.051    0.092   -0.558    0.577
-## 
-## Covariances:
-##                    Estimate  Std.Err  z-value  P(&gt;|z|)
-##  .i ~~                                                
-##     lin              -0.982    0.531   -1.850    0.064
-## 
-## Intercepts:
-##                    Estimate  Std.Err  z-value  P(&gt;|z|)
-##    .psstot0           0.000                           
-##    .psstot2           0.000                           
-##    .psstot4           0.000                           
-##    .psstot6           0.000                           
-##    .psstot8           0.000                           
-##    .psstot10          0.000                           
-##    .psstot12          0.000                           
-##    .psstot13          0.000                           
-##    .i                22.941    1.380   16.621    0.000
-##     lin              -0.043    0.074   -0.585    0.559
-## 
-## Variances:
-##                    Estimate  Std.Err  z-value  P(&gt;|z|)
-##    .i                29.977    7.035    4.261    0.000
-##     lin               0.208    0.063    3.310    0.001
-##    .psstot0    (e)   21.678    1.577   13.748    0.000
-##    .psstot2    (e)   21.678    1.577   13.748    0.000
-##    .psstot4    (e)   21.678    1.577   13.748    0.000
-##    .psstot6    (e)   21.678    1.577   13.748    0.000
-##    .psstot8    (e)   21.678    1.577   13.748    0.000
-##    .psstot10   (e)   21.678    1.577   13.748    0.000
-##    .psstot12   (e)   21.678    1.577   13.748    0.000
-##    .psstot13   (e)   21.678    1.577   13.748    0.000</code></pre>
-<div class="sourceCode" id="cb35"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb35-1"><a href="#cb35-1" aria-hidden="true" tabindex="-1"></a><span class="fu">anova</span>( stress.lgc1.fit, stress.lgc2.fit )</span></code></pre></div>
-<pre><code>## Chi-Squared Difference Test
-## 
-##                 Df    AIC    BIC  Chisq Chisq diff Df diff Pr(&gt;Chisq)    
-## stress.lgc1.fit 48 3182.3 3208.0 49.925                                  
-## stress.lgc2.fit 52 3202.2 3219.3 77.809     27.884       4  1.317e-05 ***
-## ---
-## Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1</code></pre>
-<div class="sourceCode" id="cb37"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb37-1"><a href="#cb37-1" aria-hidden="true" tabindex="-1"></a>dd.cts <span class="ot">&lt;-</span> <span class="fu">datadist</span>( cts.splines )</span>
-<span id="cb37-2"><a href="#cb37-2" aria-hidden="true" tabindex="-1"></a><span class="fu">options</span>( <span class="at">datadist =</span> <span class="st">&#39;dd.cts&#39;</span>)</span>
-<span id="cb37-3"><a href="#cb37-3" aria-hidden="true" tabindex="-1"></a>gls.stress1 <span class="ot">&lt;-</span> <span class="fu">Gls</span>( psstot <span class="sc">~</span> <span class="fu">rcs</span>( weeks, <span class="dv">3</span>),</span>
-<span id="cb37-4"><a href="#cb37-4" aria-hidden="true" tabindex="-1"></a>                    <span class="at">correlation =</span> <span class="fu">corAR1</span>( <span class="at">form =</span><span class="sc">~</span> weeks <span class="sc">|</span> id ),</span>
-<span id="cb37-5"><a href="#cb37-5" aria-hidden="true" tabindex="-1"></a>                    <span class="at">data =</span> cts.splines,</span>
-<span id="cb37-6"><a href="#cb37-6" aria-hidden="true" tabindex="-1"></a>                    <span class="at">x =</span> T )</span>
-<span id="cb37-7"><a href="#cb37-7" aria-hidden="true" tabindex="-1"></a><span class="fu">summary</span>( gls.stress1 )</span></code></pre></div>
-<pre><code>##              Effects              Response : psstot 
-## 
-##  Factor Low High Diff. Effect   S.E.    Lower 0.95 Upper 0.95
-##  weeks  3.5 10.5 7     -0.38106 0.68087 -1.7155    0.95343</code></pre>
-<div class="sourceCode" id="cb39"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb39-1"><a href="#cb39-1" aria-hidden="true" tabindex="-1"></a><span class="fu">print</span>( gls.stress1 )</span></code></pre></div>
-<pre><code>## Generalized Least Squares Fit by REML
-##  
-##  Gls(model = psstot ~ rcs(weeks, 3), data = cts.splines, correlation = corAR1(form = ~weeks | 
-##      id), x = T)
-##  
-##                                                     
-##     Obs 607    Log-restricted-likelihood-1970.90    
-##  Clusters82                        Model d.f.  2    
-##     g 0.661                        sigma  7.8908    
-##                                    d.f.      604    
-##  
-##            Coef    S.E.   t     Pr(&gt;|t|)
-##  Intercept 21.8348 0.8704 25.08 &lt;0.0001 
-##  weeks      0.3583 0.2200  1.63 0.1038  
-##  weeks&#39;    -0.5164 0.2823 -1.83 0.0678  
-##  
-##  Correlation Structure: ARMA(1,0)
-##   Formula: ~weeks | id 
-##   Parameter estimate(s):
-##       Phi1 
-##  0.7886409 
-## </code></pre>
-<div class="sourceCode" id="cb41"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb41-1"><a href="#cb41-1" aria-hidden="true" tabindex="-1"></a>lme.stress1 <span class="ot">&lt;-</span> <span class="fu">lme</span>( psstot <span class="sc">~</span> <span class="fu">rcs</span>( weeks, <span class="dv">3</span>) <span class="sc">+</span> <span class="fu">rcs</span>( dasct, <span class="dv">3</span> ),</span>
-<span id="cb41-2"><a href="#cb41-2" aria-hidden="true" tabindex="-1"></a>                    <span class="at">random =</span><span class="sc">~</span> <span class="fu">rcs</span>( weeks, <span class="dv">3</span> ) <span class="sc">|</span> id,</span>
-<span id="cb41-3"><a href="#cb41-3" aria-hidden="true" tabindex="-1"></a>                    <span class="at">data =</span> cts.splines,</span>
-<span id="cb41-4"><a href="#cb41-4" aria-hidden="true" tabindex="-1"></a>                    <span class="at">na.action =</span> <span class="st">&#39;na.omit&#39;</span>,</span>
-<span id="cb41-5"><a href="#cb41-5" aria-hidden="true" tabindex="-1"></a>                    <span class="at">method =</span> <span class="st">&#39;ML&#39;</span>)</span>
-<span id="cb41-6"><a href="#cb41-6" aria-hidden="true" tabindex="-1"></a><span class="fu">summary</span>( lme.stress1 )</span></code></pre></div>
-<pre><code>## Linear mixed-effects model fit by maximum likelihood
-##   Data: cts.splines 
-##        AIC      BIC    logLik
-##   3874.445 3927.268 -1925.223
-## 
-## Random effects:
-##  Formula: ~rcs(weeks, 3) | id
-##  Structure: General positive-definite, Log-Cholesky parametrization
-##                     StdDev   Corr         
-## (Intercept)         5.396515 (Intr) rc(,3)
-## rcs(weeks, 3)weeks  1.162322 -0.165       
-## rcs(weeks, 3)weeks&#39; 1.422736 -0.055 -0.904
-## Residual            4.532727              
-## 
-## Fixed effects:  psstot ~ rcs(weeks, 3) + rcs(dasct, 3) 
-##                         Value Std.Error  DF   t-value p-value
-## (Intercept)         22.398413 1.2119137 520 18.481855  0.0000
-## rcs(weeks, 3)weeks   0.258956 0.1846890 520  1.402122  0.1615
-## rcs(weeks, 3)weeks&#39; -0.353792 0.2329251 520 -1.518908  0.1294
-## rcs(dasct, 3)dasct   0.101483 0.0513904  78  1.974751  0.0518
-## rcs(dasct, 3)dasct&#39; -0.028816 0.0656129  78 -0.439187  0.6617
-##  Correlation: 
-##                     (Intr) rcs(w,3) rcs(w,3)&#39; rcs(d,3)
-## rcs(weeks, 3)weeks  -0.259                            
-## rcs(weeks, 3)weeks&#39;  0.133 -0.924                     
-## rcs(dasct, 3)dasct   0.719 -0.004   -0.009            
-## rcs(dasct, 3)dasct&#39; -0.791  0.002    0.010    -0.911  
-## 
-## Standardized Within-Group Residuals:
-##          Min           Q1          Med           Q3          Max 
-## -3.242539495 -0.510464285  0.005227876  0.495163629  3.415296110 
-## 
-## Number of Observations: 603
-## Number of Groups: 81</code></pre>
+</div>
+<div id="conclusions" class="section level2">
+<h2>Conclusions</h2>
+<p>Hopefully, this demonstration will help others implement restricted
+cubic splines to model nonlinear trajectories and nonlinear effects of
+continuous predictors in SEM models. Unfortunately, I don’t know of a
+simple way to make plots of predicted values against the observed data
+when working in the SEM framework. It can be done but would be fairly
+tedious. Automating this to mimic the <em>rms</em> package should be a
+goal moving forward.</p>
 </div>
 
 

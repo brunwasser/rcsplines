@@ -23,6 +23,8 @@ knitr::opts_chunk$set(echo = TRUE,
 ## Overview
 The purpose of this page is to demonstrate how restricted cubic splines (RCSs) to model nonlinear effects of predictors and nonlinear growth trajectories within a structural equation models (SEMs). First, I will show how to implement RCSs in ordinary least squares (OLS) and generalized least square (GLS) models. Then I will show how to implement RCSs in the context of SEMs.
 
+** This is a work-in-progress. Please let me know if you spot any errors or have suggestions.**
+
 ## Workspace Prep
 Load require package. You may have to install these packages if you have never installed them before using the **install.packages()** function. 
 ```{r}
@@ -33,6 +35,8 @@ require( rms )
 require( Hmisc )
 require( lavaan )
 require( ERP )
+require( MASS )
+require( nlme )
 ```
 
 
@@ -248,11 +252,112 @@ impplot <- ggplot( ) +
 impplot
 ```
 
+
+
+
 ## Latent Growth Curve Model: Simulated Data
 Now we can apply the 
 
-## Latent Growth Curve Model: Perceived Stress Trajectories
+I adapt [code](https://www.rdocumentation.org/packages/rms/versions/6.3-0/topics/Gls) from the *rms* package documentation to simulate longitudinal data in the "long" format, with as many rows per participant ($N=500$) as there are time points. The outcome variable is continuous and is measured at 10 time points.  
+```{r}
+ns  <- 500  # no. subjects
+nt  <- 10  # no. time points/subject
+           # usually do 100 for variances, 1000 for nonparametric CLs
+rho <- .5  # AR(1) correlation parameter
+V <- matrix(0, nrow=nt, ncol=nt)
+V <- rho^abs(row(V)-col(V))   # per-subject correlation/covariance matrix
 
+d <- expand.grid(tim=1:nt, id=1:ns)
+d$trt <- factor(ifelse(d$id <= ns/2, 'a', 'b'))
+true.beta <- c(Intercept=0,tim=.1,'tim^2'=0,'trt=b'=1)
+d$ey  <- true.beta['Intercept'] + true.beta['tim']*d$tim +
+  true.beta['tim^2']*(d$tim^2) +  true.beta['trt=b']*(d$trt=='b')
+set.seed(13)
+d$y <- d$ey + as.vector(t(mvrnorm(n=ns, mu=rep(0,nt), Sigma=V)))
+
+head( d )
+```
+
+The data need to be converted to a "wide" format do that there are as many columns for y as there are time points in order to run latent growth curve analyses.
+```{r}
+dwide <- reshape( d, 
+                  v.names = 'y',
+                  idvar = 'id',
+                  timevar = 'tim',
+                  drop = 'ey',
+                  direction = 'wide',
+                  sep='')
+head( dwide )
+dwide$trt <- as.numeric( dwide$trt ) - 1
+```
+
+
+Now we can set up the latent growth curve model using the [lavaan](https://www.lavaan.ugent.be/) package. We want to model the effect of time using a restricted cubic spline. Unlike in standard regression models where time effects are captured by observed variables included in the dataset, time effects are captured by latent (unobserved) intercept & slope variables ("growth factors") in latent growth curve (LGC) models. The factor loadings are (typically) fixed at values selected to model a specific trajectory shape. To model a nonlinear trajectory using a restricted cubic spline, we need to have $k-1$ latent slope variables to capture the time effect. For this example, I will model a 3-knot RCS effect for time ($df=2$) with knots at time points 2, 5, and 9 -- so we will need to latent slope factors. Note, this is the same number of $df$ that would be required to estimate a quadratic growth model. The question is: How do we constrain the factor loadings in order to estimate the appropriate restricted cubic spline trajectory. Unfortunately, I don't know of any existing functions equivalent to *rms* function **rcs()** that can automate this process when using the *lavaan* package. However, the **rcspline.eval()** function from the *Hmisc* package can help us so that we don't have to figure it manually. The values for the factor loadings of the two latent slopes are provided below. Note, the first slope is linear and the second captures the nonlinear effect.
+
+```{r}
+long.spline <- data.frame( rcspline.eval( d$tim, nk = 3, knots = c( 2, 5, 9 ), inclx = T) )
+colnames( long.spline ) <- c('rcs1','rcs2')
+long.spline1 <- long.spline[ unique( long.spline$rcs1 ), ]
+
+```
+
+We now specify a latent growth curve model just as you [typically would](https://www.lavaan.ugent.be/tutorial/growth.html), except using the the factor loadings for the two latent slopes we obtained above. We'll also evaluate the effect of the treatment variable on the outcome trajectories by regressing the intercept & slopes on the *trt* variable. 
+
+```{r}
+sim.lgc1 <- '
+## Define the latent intecept
+i =~ 1*y1 + 1*y2 + 1*y3 + 1*y4 + 1*y5 + 1*y6 + 1*y7 + 1*y8 + 1*y9 + 1*y10
+## Define the two latent slopes using the factor loading values obtained above
+rcs1 =~ 1*y1 + 2*y2 + 3*y3 + 4*y4 + 5*y5 + 6*y6 + 7*y7 + 8*y8 + 9*y9 + 10*y10
+rcs2 =~ 0*y1 + 0*y2 + 0.02040816*y3 + 0.16326531*y4 + 0.55102041*y5 + 1.27040816*y6 + 2.26530612*y7 + 3.44387755*y8 + 4.71428571*y9 + 6*y10
+## Hold error variances constant over time
+y1 ~~ e*y1; y2 ~~ e*y2; y3 ~~ e*y3; y4 ~~ e*y4; y5 ~~ e*y5; y6 ~~ e*y6; y7 ~~ e*y7; y8 ~~ e*y8; y9 ~~ e*y9; y10 ~~ e*y10
+## Regress growth factors on treatment
+i + rcs1 + rcs2 ~ trt
+'
+sim.lgc1.fit <- growth( sim.lgc1, data = dwide, auto.cov.y =F, auto.var = F )
+
+```
+
+We can then use the summary function to see the results. The *trt* variable has an effect on the latent intercept and first (linear) RCS latent slope.
+```{r}
+summary( sim.lgc1.fit )
+```
+
+
+Now let's run a similar model in a mixed-effects modeling framework using the [nlme package](https://www.rdocumentation.org/packages/nlme/versions/3.1-160) to see if we get a similar result. We will use the "long" simulated data file to run these analyses. 
+
+When you call the **rcs()** function, $k-1$ new variables are created 
+
+```{r}
+
+timspline <- data.frame( rcspline.eval( d$tim , nk = 3, knots = c(2,5,9 ), inclx = T ) )
+colnames( timspline ) <- c('rcs1','rcs2' )
+d1 <- cbind( d, timspline )
+
+lme.sim1 <- lme(  y ~ rcs1*trt + rcs2*trt, 
+                  random =~ rcs1 + rcs2 | id, 
+                  data = d1  )
+
+```
+
+Let's look at the coefficients from the mixed-effects model.
+```{r}
+summary( lme.sim1 )
+```
+
+And now the equivalent coefficients from the latent growth model. 
+```{r}
+sim.lgc1.par <- parameterEstimates( sim.lgc1.fit )
+sim.lgc1.par[ c(62,63,64,41,42,43), c('lhs','op','rhs','est','se','ci.lower','ci.upper')]
+```
+
+You can see that the results are essentially identical. This confirms that we can apply RCSs within a latent growth curve model to capture nonlinear trajectories by constraining the factor loadings of the latent slope factors just as you would constrain the values of time variables within a standard regression framework. 
+
+## Latent Growth Curve Model: Perceived Stress Trajectories
+Now let's apply the RCS approach using real longitudinal data from the College Transition Study. In this study, incoming college students completed mental health surveys 8 times during their first semester at a large university (twice per month during the fall semester). To demonstrate the use of RCSs, we will model perceived stress trajectories assuming a nonlinear trajectory defined by an unknown function that we hope can be well estimated using a 3-knot RCS. We will evaluate whether a continuous predictor (measuring students dysfunctional beliefs) predicts perceived stress trajectories. We don't want to assume that dysfunctional attitudes predicts perceived stress in a linear fashion, so we will use a 3-knot RCS to allow for a flexible nonlinear effect. 
+
+Load in the data.
 ```{r}
 load( 'cts.splines.Rdata' )
 html( describe( cts.splines ) )
@@ -284,7 +389,7 @@ head( cts.wide1 )
 ```
 
 
-We also want to use a 3-knot restricted cubic spline to estimate a nonlinear stress trajectory. Unlike in standard regression models where time effects are captured by observed variables included in the dataset, time effects are captured by latent (unobserved) intercept & slope variables ("growth factors") in latent growth curve (LGC) models. The factor loadings are (typically) fixed at values selected to model a specific trajectory shape. To model a nonlinear trajectory using a restricted cubic spline, we need to have $k-1$ latent slope variables to capture the time effect; so we need 2 latent slope factors to estimate a 3-knot restricted cubic spline. Note, this is the same number of latent slopes needed to estimate a quadratic growth curve model. The question is: how do we constrain the factor loadings in order to estimate the appropriate restricted cubic spline trajectory. Again, the **rcspline.eval()** function can help us so that we don't have to figure it manually.  
+We also want to use a 3-knot restricted cubic spline to estimate a nonlinear stress trajectory.   
 ```{r}
 knots <- data.frame( rcspline.eval( cts.splines$weeks, nk = 3, knots = c( 4, 8, 14 ), inclx = T ) )
 knots1 <- knots[ !duplicated( knots$x ), ] 
@@ -293,7 +398,7 @@ knots1
 
 ```
 
-
+The RCS growth curve model fits the data well. But we may be able to simplify the model by allowing the perceived stress growth trajectory to be linear.
 ```{r}
 stress.lgc1 <- '
 ## Define the latent growth factors -- intercept, linear slope, and nonlinear slope
@@ -301,13 +406,6 @@ i =~ 1*psstot0 + 1*psstot2 + 1*psstot4 + 1*psstot6 + 1*psstot8 + 1*psstot10 + 1*
 lin =~ 0*psstot0 + 2*psstot2 + 4*psstot4 + 6*psstot6 + 8*psstot8 + 10*psstot10 + 12*psstot12 + 13*psstot13
 nonlin =~ 0*psstot0 + 0*psstot2 + 0*psstot4 + 0.08*psstot6 + 0.64*psstot8 + 2.026667*psstot10 + 4.053333*psstot12 + 5.206667*psstot13
 ## Estimate first-order autoregressive effect -- hold effect constant over time by giving each the same label -- phi
-# psstot13 ~ phi*psstot12
-# psstot12 ~ phi*psstot10
-# psstot10 ~ phi*psstot8
-# psstot8 ~ phi*psstot6
-# psstot6 ~ phi*psstot4
-# psstot4 ~ phi*psstot2
-# psstot2 ~ phi*psstot0
 ## Constrain variances of latent growth models to = 0 -- i.e., no random effects
 i ~~ i
 lin ~~ lin
@@ -331,12 +429,14 @@ i  ~ dasct + dasct.nonlinear
 stress.lgc1.fit <- growth( stress.lgc1,
                           data = cts.wide1,
                           estimator = 'ml' )
-summary( stress.lgc1.fit, fit.measures = T )
+fitmeas <- c("npar","chisq", "df", "pvalue", "tfi", "rmsea","rmsea.ci.lower","rmsea.ci.upper","srmr")
+
+fitMeasures( stress.lgc1.fit, fit.measures = fitmeas )
 ```
 
 
 
-
+Fit a linear growth trajectory by eliminating the nonlinear latent slope parameter. This results in a gain of 4 $df$.
 ```{r}
 stress.lgc2 <- '
 ## Define the latent growth factors -- intercept, linear slope, and nonlinear slope
@@ -370,47 +470,62 @@ i  ~ dasct + dasct.nonlinear
 stress.lgc2.fit <- growth( stress.lgc2,
                           data = cts.wide1,
                           estimator = 'ml' )
-summary( stress.lgc2.fit, fit.measures = T )
+fitMeasures( stress.lgc2.fit, fit.measures = fitmeas )
 ```
 
 
 
-
+Conduct a likelihood ratio test ($df=4$) comparing the nonlinear RCS growth model and the simpler linear growth model. The $\chi^2$ value is highly significant and the AIC value is smaller for the nonlinear RCS growth model. Therefore, we will retain the nonlinear growth parameter.
 ```{r}
 anova( stress.lgc1.fit, stress.lgc2.fit )
 ```
 
 
-
-
-
-
-
+Next, we can test whether we can simplify the model by simplifying the effect of dysfunctional attitudes on perceived stress trajectories by constraining the effect to be linear (i.e., getting rid of the nonlinear RCS effect).
 
 ```{r}
+stress.lgc3 <- '
+## Define the latent growth factors -- intercept, linear slope, and nonlinear slope
+i =~ 1*psstot0 + 1*psstot2 + 1*psstot4 + 1*psstot6 + 1*psstot8 + 1*psstot10 + 1*psstot12 + 1*psstot13
+lin =~ 0*psstot0 + 2*psstot2 + 4*psstot4 + 6*psstot6 + 8*psstot8 + 10*psstot10 + 12*psstot12 + 13*psstot13
+nonlin =~ 0*psstot0 + 0*psstot2 + 0*psstot4 + 0.08*psstot6 + 0.64*psstot8 + 2.026667*psstot10 + 4.053333*psstot12 + 5.206667*psstot13
+## Estimate first-order autoregressive effect -- hold effect constant over time by giving each the same label -- phi
+## Constrain variances of latent growth models to = 0 -- i.e., no random effects
+i ~~ i
+lin ~~ lin
+nonlin ~~ nonlin
+i ~~ lin
+i ~~ nonlin
+lin ~~ nonlin
+## Constrain error variances to be constant over time
+psstot0 ~~ e*psstot0
+psstot2 ~~ e*psstot2
+psstot4 ~~ e*psstot4
+psstot6 ~~ e*psstot6
+psstot8 ~~ e*psstot8
+psstot10 ~~ e*psstot10
+psstot12 ~~ e*psstot12
+psstot13 ~~ e*psstot13
+## Estimate effects of DAS on stress trajectories
+i  ~ dasct + 0*dasct.nonlinear
+' 
 
-dd.cts <- datadist( cts.splines )
-options( datadist = 'dd.cts')
-gls.stress1 <- Gls( psstot ~ rcs( weeks, 3),
-                    correlation = corAR1( form =~ weeks | id ),
-                    data = cts.splines,
-                    x = T )
-summary( gls.stress1 )
-print( gls.stress1 )
+stress.lgc3.fit <- growth( stress.lgc3,
+                          data = cts.wide1,
+                          estimator = 'ml' )
+fitMeasures( stress.lgc3.fit, fit.measures = fitmeas )
 ```
 
 
+We can now conduct a $df=1$ likelihood ratio test to determine whether we need to retain the nonlinear effect of dysfunctional attitudes. The test is not significant and the AIC favors the simpler model. So we will eliminate the nonlinear effect of dysfunctional attitudes.
 ```{r}
-lme.stress1 <- lme( psstot ~ rcs( weeks, 3) + rcs( dasct, 3 ),
-                    random =~ rcs( weeks, 3 ) | id,
-                    data = cts.splines,
-                    na.action = 'na.omit',
-                    method = 'ML')
-summary( lme.stress1 )
-
+anova( stress.lgc1.fit, stress.lgc3.fit )
 ```
 
+Now let's look at the results of the final model with a nonlinear trajectory and linear effect of dysfunctional attitudes. We see that the linear effect of dysfunctional attitudes is positive and significant, indicating that students with higher dysfunctional attitudes begin the semester with higher levels of perceived stress. (Note, we did not consider in any of the models the possibility that dysfunctional attitudes affects the shape of students' stress trajecotries -- i.e., exposure by time interaction).
+```{r}
+summary( stress.lgc3.fit )
+```
 
-
-
-
+## Conclusions
+Hopefully, this demonstration will help others implement restricted cubic splines to model nonlinear trajectories and nonlinear effects of continuous predictors in SEM models. Unfortunately, I don't know of a simple way to make plots of predicted values against the observed data when working in the SEM framework. It can be done but would be fairly tedious. Automating this to mimic the *rms* package should be a goal moving forward. 
